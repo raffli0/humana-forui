@@ -1,4 +1,5 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide AuthState;
 import '../services/auth_service.dart';
 import 'auth_event.dart';
 import 'auth_state.dart';
@@ -14,6 +15,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthLogoutRequested>(_onLogoutRequested);
     on<AuthCheckRequested>(_onAuthCheckRequested);
     on<AuthProfileUpdateRequested>(_onProfileUpdateRequested);
+    on<AuthProfilePhotoUpdateRequested>(_onProfilePhotoUpdateRequested);
   }
 
   Future<void> _onAuthCheckRequested(
@@ -82,6 +84,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
   }
 
+  Future<void> _onProfilePhotoUpdateRequested(
+    AuthProfilePhotoUpdateRequested event,
+    Emitter<AuthState> emit,
+  ) async {
+    emit(state.copyWith(status: AuthStatus.loading));
+    try {
+      final updatedUser = await _authService.updateProfilePhoto(
+        event.imageFile,
+      );
+      emit(state.copyWith(status: AuthStatus.authenticated, user: updatedUser));
+    } catch (e) {
+      emit(
+        state.copyWith(status: AuthStatus.error, errorMessage: e.toString()),
+      );
+    }
+  }
+
   Future<void> _onLoginRequested(
     AuthLoginRequested event,
     Emitter<AuthState> emit,
@@ -103,9 +122,18 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           emit(state.copyWith(companyName: companyName));
         }
       }
+    } on AuthException catch (e) {
+      String message = e.message;
+      if (e.code == 'invalid_login_credentials') {
+        message = 'Email atau kata sandi salah.';
+      }
+      emit(state.copyWith(status: AuthStatus.error, errorMessage: message));
     } catch (e) {
       emit(
-        state.copyWith(status: AuthStatus.error, errorMessage: e.toString()),
+        state.copyWith(
+          status: AuthStatus.error,
+          errorMessage: e.toString().replaceAll("Exception: ", ""),
+        ),
       );
     }
   }
@@ -130,9 +158,20 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
           companyName: event.companyName,
         ),
       );
+    } on AuthException catch (e) {
+      String message = e.message;
+      if (e.code == 'user_already_exists') {
+        message = 'Email sudah terdaftar. Silakan masuk.';
+      } else if (e.code == 'weak_password') {
+        message = 'Kata sandi terlalu lemah.';
+      }
+      emit(state.copyWith(status: AuthStatus.error, errorMessage: message));
     } catch (e) {
       emit(
-        state.copyWith(status: AuthStatus.error, errorMessage: e.toString()),
+        state.copyWith(
+          status: AuthStatus.error,
+          errorMessage: e.toString().replaceAll("Exception: ", ""),
+        ),
       );
     }
   }

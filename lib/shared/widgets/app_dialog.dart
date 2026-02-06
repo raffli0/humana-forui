@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_colors.dart';
 
 class AppDialog {
   static Future<void> show({
@@ -11,12 +12,13 @@ class AppDialog {
     VoidCallback? onSecondary,
     bool isDestructive = false,
   }) {
+    final colors = context.colors;
     return showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        backgroundColor: Colors.white, // Ensure clean white background
-        elevation: 0, // Flat premium feel
+        backgroundColor: colors.surface,
+        elevation: 0,
         child: Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(
@@ -26,19 +28,19 @@ class AppDialog {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
+                  color: colors.textPrimary,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
-                  color: Colors.black54,
+                  color: colors.textSecondary,
                   height: 1.4,
                 ),
               ),
@@ -79,16 +81,15 @@ class AppDialog {
     required bool isPrimary,
     bool isDestructive = false,
   }) {
+    final colors = context.colors;
     final bgColor = isPrimary
-        ? (isDestructive ? Colors.red.shade50 : const Color(0xff5a64d6))
+        ? (isDestructive ? Colors.red.shade50 : colors.accent)
         : Colors.transparent;
     final textColor = isPrimary
         ? (isDestructive ? Colors.red : Colors.white)
-        : Colors.black54;
+        : colors.textSecondary;
 
     if (!isPrimary) {
-      // Secondary is purely text usually, or bordered?
-      // User said "Secondary actions use neutral styling"
       return GestureDetector(
         onTap: onTap,
         child: Container(
@@ -100,10 +101,10 @@ class AppDialog {
           ),
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 16,
-              color: Colors.black54,
+              color: colors.textSecondary,
             ),
           ),
         ),
@@ -121,7 +122,7 @@ class AppDialog {
           boxShadow: isPrimary && !isDestructive
               ? [
                   BoxShadow(
-                    color: const Color(0xff5a64d6).withValues(alpha: 0.3),
+                    color: colors.accent.withValues(alpha: 0.3),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),

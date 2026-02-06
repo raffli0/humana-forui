@@ -1,11 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:shift/features/leave/ui/leave_detail_page.dart';
-import 'package:shift/features/leave/ui/new_leave_form_page.dart';
-import 'package:shift/shared/widgets/app_header.dart';
+import 'package:humana/features/leave/ui/leave_detail_page.dart';
+import 'package:humana/features/leave/ui/new_leave_form_page.dart';
+import 'package:humana/features/request/ui/new_overtime_page.dart';
+import 'package:humana/features/request/ui/new_shift_swap_page.dart';
+import 'package:humana/shared/widgets/app_header.dart';
+import 'package:humana/core/theme/app_colors.dart';
+import 'package:humana/core/widgets/skeleton.dart';
 import '../../leave/services/leave_service.dart';
 import '../../leave/models/leave_request_model.dart';
+import '../services/overtime_service.dart';
+import '../services/shift_swap_service.dart';
 import '../../auth/services/auth_service.dart';
+
+// Unified Model for List
+class RequestListItem {
+  final String id;
+  final String type; // 'Sick Leave', 'Overtime', 'Shift Swap', etc.
+  final DateTime date; // Sortable date (Start date, or request date)
+  final DateTime? endDate; // Optional end date for ranges
+  final String status;
+  final DateTime createdAt;
+  final String title;
+  final String subtitle;
+  final dynamic originalModel; // Keep reference to original model for details
+
+  RequestListItem({
+    required this.id,
+    required this.type,
+    required this.date,
+    this.endDate,
+    required this.status,
+    required this.createdAt,
+    required this.title,
+    required this.subtitle,
+    required this.originalModel,
+  });
+}
 
 class RequestsPage extends StatefulWidget {
   const RequestsPage({super.key});
@@ -16,18 +47,14 @@ class RequestsPage extends StatefulWidget {
 
 class _RequestsPageState extends State<RequestsPage> {
   int filterIndex = 0;
-  final filters = ['All', 'Pending', 'Approved', 'Rejected'];
-
-  // Design Constants
-  static const kBgColor = Color(0xFF0E0F13);
-  static const kSurfaceColor = Color(0xFF151821);
-  static const kAccentColor = Color(0xFF7C7FFF);
-  static const kTextPrimary = Color(0xFFEDEDED);
-  static const kTextSecondary = Color(0xFF9AA0AA);
+  final filters = ['Semua', 'Menunggu', 'Disetujui', 'Ditolak'];
 
   final _leaveService = LeaveService();
+  final _overtimeService = OvertimeService();
+  final _shiftSwapService = ShiftSwapService();
   final _authService = AuthService();
-  List<LeaveRequestModel> _requests = [];
+
+  List<RequestListItem> _requests = [];
   bool _isLoading = true;
   String? _errorMessage;
 
@@ -41,10 +68,78 @@ class _RequestsPageState extends State<RequestsPage> {
     try {
       final user = await _authService.checkAuthStatus();
       if (user != null) {
-        final data = await _leaveService.getMyRequests(user.id);
+        // Fetch all types in parallel
+        final results = await Future.wait([
+          _leaveService.getMyRequests(user.id),
+          _overtimeService.getMyOvertimeRequests(user.id),
+          _shiftSwapService.getMyShiftSwapRequests(user.id),
+        ]);
+
+        final leaves = results[0] as List<LeaveRequestModel>;
+        final overtimes =
+            results[1]
+                as dynamic; // Using dynamic to avoid import issues if type check fails
+        final shiftSwaps = results[2] as dynamic;
+
+        final List<RequestListItem> allRequests = [];
+
+        // Map Leaves
+        allRequests.addAll(
+          leaves.map(
+            (l) => RequestListItem(
+              id: l.id,
+              type: l.type,
+              date: l.startDate,
+              endDate: l.endDate,
+              status: l.status,
+              createdAt: l.createdAt,
+              title: l.type,
+              subtitle: _formatDateRange(l.startDate, l.endDate),
+              originalModel: l,
+            ),
+          ),
+        );
+
+        // Map Overtime
+        for (final o in overtimes) {
+          allRequests.add(
+            RequestListItem(
+              id: o.id,
+              type: 'Overtime',
+              date: o.date,
+              status: o.status,
+              createdAt: o.createdAt,
+              title: 'Overtime',
+              subtitle:
+                  "${DateFormat("MMM dd").format(o.date)} • ${o.durationMinutes} mnt",
+              originalModel: o,
+            ),
+          );
+        }
+
+        // Map Shift Swaps
+        for (final s in shiftSwaps) {
+          allRequests.add(
+            RequestListItem(
+              id: s.id,
+              type: 'Shift Swap',
+              date: s.myShiftDate,
+              status: s.status,
+              createdAt: s.createdAt,
+              title: 'Shift Swap',
+              subtitle:
+                  "Tukar ${DateFormat("MMM dd").format(s.myShiftDate)} dgn ${s.targetUserName}",
+              originalModel: s,
+            ),
+          );
+        }
+
+        // Sort by CreatedAt descending (or Date descending)
+        allRequests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
         if (mounted) {
           setState(() {
-            _requests = data;
+            _requests = allRequests;
             _isLoading = false;
           });
         }
@@ -55,7 +150,7 @@ class _RequestsPageState extends State<RequestsPage> {
       debugPrint("Error loading requests: $e");
       if (mounted) {
         setState(() {
-          _errorMessage = "Failed to load requests";
+          _errorMessage = "Gagal memuat permintaan";
           _isLoading = false;
         });
       }
@@ -64,19 +159,24 @@ class _RequestsPageState extends State<RequestsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
-      backgroundColor: kBgColor,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: Column(
           children: [
-            AppHeader(title: "Requests", showAvatar: false, showBell: false),
+            const AppHeader(
+              title: "Permintaan",
+              showAvatar: false,
+              showBell: false,
+            ),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _sectionTitle("CREATE NEW"),
+                    _sectionTitle("BUAT BARU"),
                     const SizedBox(height: 12),
                     _buildCreateNew(),
 
@@ -84,14 +184,14 @@ class _RequestsPageState extends State<RequestsPage> {
                     _buildFilter(),
 
                     const SizedBox(height: 24),
-                    _sectionTitle("RECENT HISTORY"),
+                    _sectionTitle("RIWAYAT TERBARU"),
                     const SizedBox(height: 12),
 
                     SizedBox(
-                      height:
-                          500, // Explicit height for list or use shrinkWrap with physics
+                      // Explicit height/constraints handled by parent usually, but here just robust list
                       child: _buildRequestList(),
                     ),
+                    const SizedBox(height: 48), // Bottom padding
                   ],
                 ),
               ),
@@ -104,48 +204,52 @@ class _RequestsPageState extends State<RequestsPage> {
 
   Widget _buildRequestList() {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const _RequestSkeleton();
     }
 
     if (_errorMessage != null) {
       return Center(
-        child: Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
+        child: Text(
+          _errorMessage!,
+          style: TextStyle(color: context.colors.error),
+        ),
       );
     }
 
     // Filter requests
     final filtered = _requests.where((r) {
       if (filterIndex == 0) return true; // All
-      if (filterIndex == 1) return r.status == 'pending';
-      if (filterIndex == 2) return r.status == 'approved';
-      if (filterIndex == 3) return r.status == 'rejected';
+      final status = r.status.toLowerCase();
+      if (filterIndex == 1) return status == 'pending';
+      if (filterIndex == 2) return status == 'approved';
+      if (filterIndex == 3) return status == 'rejected';
       return true;
     }).toList();
 
     if (filtered.isEmpty) {
-      return const Center(
-        child: Text(
-          "No requests found",
-          style: TextStyle(color: Colors.white54),
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.only(top: 40),
+          child: Text(
+            "Tidak ada permintaan",
+            style: TextStyle(color: context.colors.textSecondary),
+          ),
         ),
       );
     }
 
     return ListView.builder(
-      physics:
-          const NeverScrollableScrollPhysics(), // Handled by parent SingleChildScrollView
+      physics: const NeverScrollableScrollPhysics(),
       shrinkWrap: true,
       itemCount: filtered.length,
       itemBuilder: (context, index) {
-        final request = filtered[index];
+        final item = filtered[index];
         return _RequestHistoryCard(
-          request: request, // Pass model
-          icon: _getIconForType(request.type),
-          title: request.type,
-          subtitle: _formatDateRange(request.startDate, request.endDate),
-          status: _capitalize(request.status),
-          statusColor: _getColorForStatus(request.status),
-          submitted: "Submitted ${_formatDate(request.createdAt)}",
+          item: item,
+          icon: _getIconForType(item.type),
+          statusColor: _getColorForStatus(item.status),
+          submitted:
+              "Diajukan ${DateFormat("MMM dd, yyyy").format(item.createdAt)}",
         );
       },
     );
@@ -160,24 +264,13 @@ class _RequestsPageState extends State<RequestsPage> {
     return "${DateFormat("MMM dd").format(start)} - ${DateFormat("MMM dd").format(end)}";
   }
 
-  String _formatDate(DateTime date) {
-    // simple nice format
-    // e.g. "2h ago" or actual date
-    final diff = DateTime.now().difference(date);
-    if (diff.inHours < 24) {
-      return "${diff.inHours}h ago";
-    } else if (diff.inDays < 7) {
-      return "${diff.inDays}d ago";
-    }
-    return DateFormat("MMM dd, yyyy").format(date);
-  }
-
   IconData _getIconForType(String type) {
+    if (type.toLowerCase().contains('leave')) {
+      if (type.toLowerCase().contains('sick')) return Icons.medical_services;
+      if (type.toLowerCase().contains('annual')) return Icons.beach_access;
+      return Icons.event_busy;
+    }
     switch (type.toLowerCase()) {
-      case 'sick leave':
-        return Icons.medical_services;
-      case 'annual leave':
-        return Icons.beach_access;
       case 'overtime':
         return Icons.timer;
       case 'shift swap':
@@ -188,26 +281,25 @@ class _RequestsPageState extends State<RequestsPage> {
   }
 
   Color _getColorForStatus(String status) {
+    final colors = context.colors;
     switch (status.toLowerCase()) {
       case 'pending':
-        return Colors.orange;
+        return colors.warning;
       case 'approved':
-        return Colors.green;
+        return colors.success;
       case 'rejected':
-        return Colors.red;
+        return colors.error;
       default:
-        return Colors.grey;
+        return colors.textSecondary;
     }
   }
 
-  String _capitalize(String s) =>
-      s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : '';
-
   Widget _sectionTitle(String text) {
+    final colors = context.colors;
     return Text(
       text,
-      style: const TextStyle(
-        color: kTextSecondary,
+      style: TextStyle(
+        color: colors.textSecondary,
         fontWeight: FontWeight.w600,
         fontSize: 12,
         letterSpacing: 1,
@@ -232,12 +324,13 @@ class _RequestsPageState extends State<RequestsPage> {
 
   /// ================= FILTER =================
   Widget _buildFilter() {
+    final colors = context.colors;
     return Container(
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: kSurfaceColor,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: colors.border.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: List.generate(filters.length, (i) {
@@ -248,7 +341,7 @@ class _RequestsPageState extends State<RequestsPage> {
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
-                  color: selected ? kAccentColor : Colors.transparent,
+                  color: selected ? colors.accent : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 alignment: Alignment.center,
@@ -256,7 +349,7 @@ class _RequestsPageState extends State<RequestsPage> {
                   filters[i],
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : kTextSecondary,
+                    color: selected ? Colors.white : colors.textSecondary,
                   ),
                 ),
               ),
@@ -275,13 +368,14 @@ class _NewRequestButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         height: 96,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: _RequestsPageState.kAccentColor,
+          color: colors.accent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -302,7 +396,7 @@ class _NewRequestButton extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'New Request',
+                    'Permintaan Baru',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 18,
@@ -311,7 +405,7 @@ class _NewRequestButton extends StatelessWidget {
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Leave, Overtime, Shift Swap',
+                    'Cuti, Lembur, Tukar Shift',
                     style: TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
@@ -326,23 +420,25 @@ class _NewRequestButton extends StatelessWidget {
 }
 
 void _showCreateRequestSheet(BuildContext context) {
+  final colors = context.colors;
   showModalBottomSheet(
     context: context,
     backgroundColor: Colors.transparent,
     builder: (_) {
       return Container(
         padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: _RequestsPageState.kSurfaceColor,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             _RequestActionTile(
               icon: Icons.flight_takeoff,
-              title: 'Leave',
+              title: 'Ajukan Cuti',
               onTap: () {
+                Navigator.pop(context); // Close sheet before push
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const NewLeaveFormPage()),
@@ -351,16 +447,24 @@ void _showCreateRequestSheet(BuildContext context) {
             ),
             _RequestActionTile(
               icon: Icons.timer,
-              title: 'Overtime',
+              title: 'Lembur',
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(context); // Close sheet before push
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NewOvertimePage()),
+                );
               },
             ),
             _RequestActionTile(
               icon: Icons.swap_horiz,
-              title: 'Shift Swap',
+              title: 'Tukar Shift',
               onTap: () {
-                Navigator.pop(context);
+                Navigator.pop(context); // Close sheet before push
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const NewShiftSwapPage()),
+                );
               },
             ),
           ],
@@ -383,17 +487,18 @@ class _RequestActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return ListTile(
-      leading: Icon(icon, color: _RequestsPageState.kAccentColor, size: 28),
+      leading: Icon(icon, color: colors.accent, size: 28),
       title: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w600,
           fontSize: 16,
-          color: _RequestsPageState.kTextPrimary,
+          color: colors.textPrimary,
         ),
       ),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: Icon(Icons.chevron_right, color: colors.textSecondary),
       onTap: onTap,
     );
   }
@@ -401,33 +506,28 @@ class _RequestActionTile extends StatelessWidget {
 
 /// ================= HISTORY CARD =================
 class _RequestHistoryCard extends StatelessWidget {
-  final LeaveRequestModel request;
+  final RequestListItem item;
   final IconData icon;
-  final String title;
-  final String subtitle;
-  final String status;
   final Color statusColor;
   final String submitted;
 
   const _RequestHistoryCard({
-    required this.request,
+    required this.item,
     required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.status,
     required this.statusColor,
     required this.submitted,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _RequestsPageState.kSurfaceColor,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.02)),
+        border: Border.all(color: colors.border.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -448,18 +548,18 @@ class _RequestHistoryCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      title,
-                      style: const TextStyle(
+                      item.title,
+                      style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
-                        color: _RequestsPageState.kTextPrimary,
+                        color: colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: _RequestsPageState.kTextSecondary,
+                      item.subtitle,
+                      style: TextStyle(
+                        color: colors.textSecondary,
                         fontSize: 13,
                       ),
                     ),
@@ -476,7 +576,7 @@ class _RequestHistoryCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  status,
+                  item.status.isNotEmpty ? _translateStatus(item.status) : '',
                   style: TextStyle(
                     color: statusColor,
                     fontWeight: FontWeight.w600,
@@ -493,25 +593,62 @@ class _RequestHistoryCard extends StatelessWidget {
               Text(
                 submitted,
                 style: TextStyle(
-                  color: _RequestsPageState.kTextSecondary.withValues(
-                    alpha: 0.6,
-                  ),
+                  color: colors.textSecondary.withValues(alpha: 0.6),
                   fontSize: 12,
                 ),
               ),
               GestureDetector(
                 onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => LeaveStatusPage(request: request),
-                    ),
-                  );
+                  if (item.originalModel is LeaveRequestModel) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            LeaveStatusPage(request: item.originalModel),
+                      ),
+                    );
+                  } else {
+                    // Show basic info dialog for now
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: colors.surface,
+                        title: Text(
+                          item.title,
+                          style: TextStyle(color: colors.textPrimary),
+                        ),
+                        content: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              "Status: ${item.status}",
+                              style: TextStyle(color: colors.textSecondary),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "Details: ${item.subtitle}",
+                              style: TextStyle(color: colors.textSecondary),
+                            ),
+                          ],
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            child: Text(
+                              "Tutup",
+                              style: TextStyle(color: colors.accent),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
                 },
-                child: const Text(
-                  "View Details ›",
+                child: Text(
+                  "Lihat Detail ›",
                   style: TextStyle(
-                    color: Colors.blue,
+                    color: colors.accent,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -520,6 +657,72 @@ class _RequestHistoryCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  String _translateStatus(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'Menunggu';
+      case 'approved':
+        return 'Disetujui';
+      case 'rejected':
+        return 'Ditolak';
+      default:
+        return status.isNotEmpty
+            ? '${status[0].toUpperCase()}${status.substring(1)}'
+            : '';
+    }
+  }
+}
+
+class _RequestSkeleton extends StatelessWidget {
+  const _RequestSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: 5,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      itemBuilder: (context, index) {
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: context.colors.surface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: context.colors.border.withValues(alpha: 0.1),
+            ),
+          ),
+          child: const Row(
+            children: [
+              Skeleton(height: 48, width: 48, borderRadius: 16),
+              SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Skeleton(height: 16, width: 80),
+                        Skeleton(height: 12, width: 60),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    Skeleton(height: 12, width: 120),
+                    SizedBox(height: 8),
+                    Skeleton(height: 14, width: 60, borderRadius: 10),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

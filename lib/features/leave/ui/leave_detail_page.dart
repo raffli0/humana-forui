@@ -1,28 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:shift/shared/widgets/app_header.dart';
-
+import 'package:humana/shared/widgets/app_header.dart';
+import 'package:humana/core/theme/app_colors.dart';
 import '../../leave/models/leave_request_model.dart';
 import 'package:intl/intl.dart';
 
 class LeaveStatusPage extends StatelessWidget {
   final LeaveRequestModel request;
 
-  // Design Constants
-  static const kBgColor = Color(0xFF0E0F13);
-  static const kSurfaceColor = Color(0xFF151821);
-  static const kTextPrimary = Color(0xFFEDEDED);
-  static const kTextSecondary = Color(0xFF9AA0AA);
-
   const LeaveStatusPage({super.key, required this.request});
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
-      backgroundColor: kBgColor,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: Column(
           children: [
-            const AppHeader(title: "Request Details", showAvatar: false),
+            const AppHeader(
+              title: "Detail Permintaan",
+              showAvatar: false,
+              showBell: false,
+            ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -30,10 +29,10 @@ class LeaveStatusPage extends StatelessWidget {
                   width: double.infinity,
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: kSurfaceColor,
+                    color: colors.surface,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: colors.border.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Column(
@@ -48,13 +47,14 @@ class LeaveStatusPage extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: _getStatusColor(
                             request.status,
+                            colors,
                           ).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           _capitalize(request.status),
                           style: TextStyle(
-                            color: _getStatusColor(request.status),
+                            color: _getStatusColor(request.status, colors),
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                           ),
@@ -64,53 +64,56 @@ class LeaveStatusPage extends StatelessWidget {
 
                       Text(
                         request.type,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
-                          color: kTextPrimary,
+                          color: colors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        "Submitted on ${DateFormat("MMM dd, yyyy").format(request.createdAt)}",
-                        style: const TextStyle(color: kTextSecondary),
+                        "Diajukan pada ${DateFormat("MMM dd, yyyy").format(request.createdAt)}",
+                        style: TextStyle(color: colors.textSecondary),
                       ),
                       const SizedBox(height: 32),
 
                       _DetailRow(
-                        label: "From",
+                        label: "Dari",
                         value: DateFormat(
                           "MMM dd, yyyy",
                         ).format(request.startDate),
+                        colors: colors,
                       ),
                       const SizedBox(height: 16),
                       _DetailRow(
-                        label: "To",
+                        label: "Sampai",
                         value: DateFormat(
                           "MMM dd, yyyy",
                         ).format(request.endDate),
+                        colors: colors,
                       ),
                       const SizedBox(height: 16),
                       _DetailRow(
-                        label: "Total Days",
+                        label: "Total Hari",
                         value:
-                            "${request.endDate.difference(request.startDate).inDays + 1} Days",
+                            "${request.endDate.difference(request.startDate).inDays + 1} Hari",
+                        colors: colors,
                       ),
 
                       if (request.reason.isNotEmpty) ...[
                         const SizedBox(height: 32),
-                        const Text(
-                          "Reason",
+                        Text(
+                          "Alasan",
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: kTextSecondary,
+                            color: colors.textSecondary,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           request.reason,
-                          style: const TextStyle(
-                            color: kTextPrimary,
+                          style: TextStyle(
+                            color: colors.textPrimary,
                             height: 1.5,
                           ),
                         ),
@@ -119,18 +122,18 @@ class LeaveStatusPage extends StatelessWidget {
                       if (request.adminNote != null &&
                           request.adminNote!.isNotEmpty) ...[
                         const SizedBox(height: 32),
-                        const Text(
-                          "Admin Note",
+                        Text(
+                          "Catatan Admin",
                           style: TextStyle(
                             fontWeight: FontWeight.w600,
-                            color: kTextSecondary,
+                            color: colors.textSecondary,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Text(
                           request.adminNote!,
-                          style: const TextStyle(
-                            color: kTextPrimary,
+                          style: TextStyle(
+                            color: colors.textPrimary,
                             height: 1.5,
                           ),
                         ),
@@ -146,39 +149,54 @@ class LeaveStatusPage extends StatelessWidget {
     );
   }
 
-  Color _getStatusColor(String status) {
+  Color _getStatusColor(String status, AppColors colors) {
     switch (status.toLowerCase()) {
       case 'pending':
-        return Colors.orange;
+        return colors.warning;
       case 'approved':
-        return Colors.green;
+        return colors.success;
       case 'rejected':
-        return Colors.red;
+        return colors.error;
       default:
-        return Colors.grey;
+        return colors.textSecondary;
     }
   }
 
-  String _capitalize(String s) =>
-      s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : '';
+  String _capitalize(String s) {
+    switch (s.toLowerCase()) {
+      case 'pending':
+        return 'Menunggu';
+      case 'approved':
+        return 'Disetujui';
+      case 'rejected':
+        return 'Ditolak';
+      default:
+        return s.isNotEmpty ? '${s[0].toUpperCase()}${s.substring(1)}' : '';
+    }
+  }
 }
 
 class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
-  const _DetailRow({required this.label, required this.value});
+  final AppColors colors;
+  const _DetailRow({
+    required this.label,
+    required this.value,
+    required this.colors,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(color: LeaveStatusPage.kTextSecondary)),
+        Text(label, style: TextStyle(color: colors.textSecondary)),
         Text(
           value,
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            color: LeaveStatusPage.kTextPrimary,
+            color: colors.textPrimary,
             fontSize: 16,
           ),
         ),

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:forui/forui.dart';
 import 'package:flutter/services.dart';
+import 'package:humana/core/theme/app_colors.dart';
 
 import '../../home/ui/home_page.dart';
 import '../../attendance/ui/attendance_page.dart';
 import '../../attendance/ui/attendance_history_page.dart';
 import '../../request/ui/request_page.dart';
-import '../../home/ui/profile_page.dart';
+import '../../payroll/ui/payroll_page.dart';
 
 class MainRootPage extends StatefulWidget {
   const MainRootPage({super.key});
@@ -23,50 +24,44 @@ class _MainRootPageState extends State<MainRootPage> {
     AttendancePage(),
     RequestsPage(),
     AttendanceHistoryPage(),
-    ProfilePage(),
+    PayrollPage(),
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _setLightStatusBar();
-  }
-
-  void _setLightStatusBar() {
-    SystemChrome.setSystemUIOverlayStyle(
-      const SystemUiOverlayStyle(
-        statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light, // ANDROID → icon putih
-        statusBarBrightness: Brightness.dark, // iOS → icon putih
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    _setLightStatusBar(); // panggil setiap rebuild
+    final colors = context.colors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
+      value: SystemUiOverlayStyle(
         statusBarColor: Colors.transparent,
-        statusBarIconBrightness: Brightness.light,
+        statusBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
       ),
       child: Scaffold(
-        backgroundColor: const Color(0xFF0c202e),
+        backgroundColor: colors.background,
         body: pages[index],
-        bottomNavigationBar: _buildBottomNav(),
+        bottomNavigationBar: _buildBottomNav(colors, isDark),
       ),
     );
   }
 
-  Widget _buildBottomNav() {
+  Widget _buildBottomNav(AppColors colors, bool isDark) {
     return Container(
-      decoration: const BoxDecoration(
-        // Optional decoration
+      decoration: BoxDecoration(
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, -2),
+                ),
+              ],
       ),
       clipBehavior: Clip.antiAlias,
       child: Material(
-        color: Colors.white,
+        color: colors.surface,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(24),
           topRight: Radius.circular(24),
@@ -81,7 +76,7 @@ class _MainRootPageState extends State<MainRootPage> {
             ),
             FBottomNavigationBarItem(
               icon: Icon(FIcons.calendar),
-              label: Text("Attendance"), // Points to History/Calendar now
+              label: Text("Attendance"),
             ),
             FBottomNavigationBarItem(
               icon: Icon(FIcons.plus),
@@ -92,8 +87,8 @@ class _MainRootPageState extends State<MainRootPage> {
               label: Text("History"),
             ),
             FBottomNavigationBarItem(
-              icon: Icon(FIcons.user),
-              label: Text("Profile"),
+              icon: Icon(FIcons.banknote),
+              label: Text("Payroll"),
             ),
           ],
         ),

@@ -1,8 +1,9 @@
 import 'dart:convert';
-import 'dart:developer' as developer;
+// import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import 'package:flutter/foundation.dart';
 
 class AttendanceApi {
   static const String baseUrl =
@@ -15,6 +16,10 @@ class AttendanceApi {
     required double longitude,
     required String address,
     required bool insideOffice,
+    // Add shift details
+    required String shiftStart,
+    required String shiftEnd,
+    required int tolerance,
   }) async {
     final uri = Uri.parse(baseUrl);
 
@@ -27,6 +32,11 @@ class AttendanceApi {
     request.fields['longitude'] = longitude.toString();
     request.fields['address'] = address;
     request.fields['inside_office'] = insideOffice ? '1' : '0';
+    // Add new fields
+    request.fields['shift_start'] = shiftStart;
+    request.fields['shift_end'] = shiftEnd;
+    request.fields['tolerance'] = tolerance.toString();
+
     request.fields['timestamp'] = DateTime.now().toUtc().toIso8601String();
     request.fields['device'] = 'mobile';
     request.fields['app_version'] = '1.0.0';
@@ -45,14 +55,11 @@ class AttendanceApi {
 
       if (response.statusCode == 200) {
         final body = await response.stream.bytesToString();
-        developer.log('UPLOAD RESPONSE: $body', name: 'AttendanceApi');
+        debugPrint('UPLOAD RESPONSE: $body');
         try {
           final json = jsonDecode(body);
           if (json['status'] == 'error') {
-            developer.log(
-              'API ERROR: ${json['message']}',
-              name: 'AttendanceApi',
-            );
+            debugPrint('API ERROR: ${json['message']}');
             return null;
           }
 
@@ -62,18 +69,15 @@ class AttendanceApi {
           }
           return null;
         } catch (e) {
-          developer.log('JSON PARSE ERROR: $e', name: 'AttendanceApi');
+          debugPrint('JSON PARSE ERROR: $e');
           return null; // upload success but parse failed
         }
       } else {
-        developer.log(
-          'UPLOAD FAILED: ${response.statusCode}',
-          name: 'AttendanceApi',
-        );
+        debugPrint('UPLOAD FAILED: ${response.statusCode}');
         return null;
       }
     } catch (e) {
-      developer.log('UPLOAD ERROR: $e', name: 'AttendanceApi');
+      debugPrint('UPLOAD ERROR: $e');
       return null;
     }
   }

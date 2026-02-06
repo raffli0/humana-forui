@@ -1,47 +1,46 @@
+import 'package:humana/core/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import '../../../shared/widgets/app_header.dart';
 
 class NotificationPage extends StatelessWidget {
   const NotificationPage({super.key});
 
-  // Design Constants matches AdminHomePage
-  static const kBgColor = Color(0xFF0E0F13);
-  static const kSurfaceColor = Color(0xFF151821);
-  static const kAccentColor = Color(0xFF7C7FFF);
-  static const kTextPrimary = Color(0xFFEDEDED);
-  static const kTextSecondary = Color(0xFF9AA0AA);
-
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     final notifications = [
       _NotifItem(
         title: "Leave Approved",
         body: "Your sick leave request for Oct 24 - 26 has been approved.",
         time: "2 hours ago",
         type: _NotifType.success,
+        colors: colors,
       ),
       _NotifItem(
         title: "Check In Reminder",
         body: "Don't forget to check in before 09:15 AM.",
         time: "5 hours ago",
         type: _NotifType.info,
+        colors: colors,
       ),
       _NotifItem(
         title: "Shift Update",
         body: "Your shift on Nov 01 has been swapped with Sarah J.",
         time: "1 day ago",
         type: _NotifType.warning,
+        colors: colors,
       ),
       _NotifItem(
         title: "Payslip Available",
         body: "Your payslip for September 2025 is now available.",
         time: "2 days ago",
         type: _NotifType.info,
+        colors: colors,
       ),
     ];
 
     return Scaffold(
-      backgroundColor: kBgColor,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -80,24 +79,26 @@ class _NotifItem extends StatelessWidget {
   final String body;
   final String time;
   final _NotifType type;
+  final AppColors colors;
 
   const _NotifItem({
     required this.title,
     required this.body,
     required this.time,
     required this.type,
+    required this.colors,
   });
 
   Color _getColor() {
     switch (type) {
       case _NotifType.success:
-        return const Color(0xFF4ADE80); // Green
+        return colors.success; // Green
       case _NotifType.warning:
-        return const Color(0xFFFACC15); // Yellow
+        return colors.warning; // Yellow
       case _NotifType.error:
-        return const Color(0xFFF87171); // Red
+        return colors.error; // Red
       case _NotifType.info:
-        return NotificationPage.kAccentColor; // Purple
+        return colors.accent; // Purple
     }
   }
 
@@ -117,16 +118,13 @@ class _NotifItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = _getColor();
-    const surfaceColor = NotificationPage.kSurfaceColor;
-    const textPrimary = NotificationPage.kTextPrimary;
-    const textSecondary = NotificationPage.kTextSecondary;
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: surfaceColor,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: colors.border.withValues(alpha: 0.05)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,8 +148,8 @@ class _NotifItem extends StatelessWidget {
                     Expanded(
                       child: Text(
                         title,
-                        style: const TextStyle(
-                          color: textPrimary,
+                        style: TextStyle(
+                          color: colors.textPrimary,
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -160,7 +158,7 @@ class _NotifItem extends StatelessWidget {
                     Text(
                       time,
                       style: TextStyle(
-                        color: textSecondary.withValues(alpha: 0.7),
+                        color: colors.textSecondary.withValues(alpha: 0.7),
                         fontSize: 12,
                       ),
                     ),
@@ -169,8 +167,8 @@ class _NotifItem extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   body,
-                  style: const TextStyle(
-                    color: textSecondary,
+                  style: TextStyle(
+                    color: colors.textSecondary,
                     fontSize: 14,
                     height: 1.4,
                   ),

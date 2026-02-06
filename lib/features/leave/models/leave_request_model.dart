@@ -1,5 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
 class LeaveRequestModel {
   final String id;
   final String userId;
@@ -20,8 +18,7 @@ class LeaveRequestModel {
     required this.userId,
     required this.userName,
     required this.userImageUrl,
-    this.companyId =
-        'default_company', // Default for now since UserModel lacks it
+    this.companyId = 'default_company',
     required this.type,
     required this.reason,
     required this.startDate,
@@ -35,37 +32,36 @@ class LeaveRequestModel {
   factory LeaveRequestModel.fromMap(Map<String, dynamic> map, String id) {
     return LeaveRequestModel(
       id: id,
-      userId: map['user_id'] ?? '',
-      userName: map['user_name'] ?? 'Unknown',
-      userImageUrl: map['user_image_url'] ?? '',
+      userId: map['employee_id'] ?? '',
+      userName: map['employee_name'] ?? 'Unknown',
+      userImageUrl: '', // Column missing in DB
       companyId: map['company_id'] ?? 'default_company',
       type: map['type'] ?? 'General',
       reason: map['reason'] ?? '',
-      startDate: (map['start_date'] as Timestamp).toDate(),
-      endDate: (map['end_date'] as Timestamp).toDate(),
+      startDate: DateTime.parse(map['start_date']),
+      endDate: DateTime.parse(map['end_date']),
       status: map['status'] ?? 'pending',
-      createdAt: (map['created_at'] as Timestamp).toDate(),
-      adminNote: map['admin_note'],
+      createdAt: DateTime.parse(
+        map['request_date'] ?? DateTime.now().toIso8601String(),
+      ),
       updatedAt: map['updated_at'] != null
-          ? (map['updated_at'] as Timestamp).toDate()
+          ? DateTime.parse(map['updated_at'])
           : null,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      'user_id': userId,
-      'user_name': userName,
-      'user_image_url': userImageUrl,
+      'employee_id': userId,
+      'employee_name': userName,
       'company_id': companyId,
       'type': type,
       'reason': reason,
-      'start_date': Timestamp.fromDate(startDate),
-      'end_date': Timestamp.fromDate(endDate),
+      'start_date': startDate.toIso8601String().split('T')[0], // Use YYYY-MM-DD
+      'end_date': endDate.toIso8601String().split('T')[0],
       'status': status,
-      'created_at': Timestamp.fromDate(createdAt),
-      'admin_note': adminNote,
-      'updated_at': updatedAt != null ? Timestamp.fromDate(updatedAt!) : null,
+      'days': endDate.difference(startDate).inDays + 1,
+      'request_date': createdAt.toIso8601String().split('T')[0],
     };
   }
 }

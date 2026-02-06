@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
-import 'package:shift/shared/widgets/app_header.dart';
+import 'package:humana/shared/widgets/app_header.dart';
+import 'package:humana/core/theme/app_colors.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../attendance/services/attendance_service.dart';
 import '../../attendance/models/attendance_model.dart';
@@ -32,13 +33,6 @@ class AttendanceHistoryPage extends StatefulWidget {
 class _AttendanceHistoryPageState extends State<AttendanceHistoryPage> {
   late Future<List<AttendanceModel>> _historyFuture;
 
-  // Design Constants
-  static const kBgColor = Color(0xFF0E0F13);
-  static const kSurfaceColor = Color(0xFF151821);
-  static const kAccentColor = Color(0xFF7C7FFF);
-  static const kTextPrimary = Color(0xFFEDEDED);
-  static const kTextSecondary = Color(0xFF9AA0AA);
-
   @override
   void initState() {
     super.initState();
@@ -66,10 +60,12 @@ class _AttendanceHistoryPageState extends State<AttendanceHistoryPage> {
       grouped[dateKey]!.add(
         _ActivityItemModel(
           time: DateFormat("hh:mm a").format(attendance.checkInTime),
-          description: "Check In",
+          description: "Masuk",
           location: attendance.checkInLocation,
           imageUrl: attendance.checkInImageUrl,
-          isLate: attendance.status == "Late",
+          isLate:
+              attendance.status ==
+              "Late", // Keep logic but consider status string might need mapping if API returns English
         ),
       );
 
@@ -78,8 +74,8 @@ class _AttendanceHistoryPageState extends State<AttendanceHistoryPage> {
         grouped[dateKey]!.add(
           _ActivityItemModel(
             time: DateFormat("hh:mm a").format(attendance.checkOutTime!),
-            description: "Check Out",
-            location: attendance.checkOutLocation ?? "Unknown",
+            description: "Pulang",
+            location: attendance.checkOutLocation ?? "Tidak diketahui",
             imageUrl: attendance.checkOutImageUrl ?? "",
           ),
         );
@@ -90,13 +86,14 @@ class _AttendanceHistoryPageState extends State<AttendanceHistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
-      backgroundColor: kBgColor,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: Column(
           children: [
             const AppHeader(
-              title: "History",
+              title: "Riwayat",
               showAvatar: false,
               showBell: false,
             ),
@@ -109,15 +106,15 @@ class _AttendanceHistoryPageState extends State<AttendanceHistoryPage> {
                   } else if (snapshot.hasError) {
                     return Center(
                       child: Text(
-                        "Error loading history",
-                        style: TextStyle(color: kTextPrimary),
+                        "Gagal memuat riwayat",
+                        style: TextStyle(color: colors.textPrimary),
                       ),
                     );
                   } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: Text(
-                        "No attendance history",
-                        style: TextStyle(color: kTextSecondary),
+                        "Tidak ada riwayat kehadiran",
+                        style: TextStyle(color: colors.textSecondary),
                       ),
                     );
                   }
@@ -151,7 +148,7 @@ class _AttendanceHistoryPageState extends State<AttendanceHistoryPage> {
                             child: Text(
                               DateFormat("EEEE, dd MMMM yyyy").format(date),
                               style: TextStyle(
-                                color: kTextSecondary,
+                                color: colors.textSecondary,
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 0.5,
@@ -162,7 +159,10 @@ class _AttendanceHistoryPageState extends State<AttendanceHistoryPage> {
                           ...activities.map(
                             (activity) => Padding(
                               padding: const EdgeInsets.only(bottom: 12),
-                              child: _HistoryItem(activity: activity),
+                              child: _HistoryItem(
+                                activity: activity,
+                                colors: colors,
+                              ),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -182,17 +182,30 @@ class _AttendanceHistoryPageState extends State<AttendanceHistoryPage> {
 
 class _HistoryItem extends StatelessWidget {
   final _ActivityItemModel activity;
+  final AppColors colors;
 
-  const _HistoryItem({required this.activity});
+  const _HistoryItem({required this.activity, required this.colors});
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       decoration: BoxDecoration(
-        color: _AttendanceHistoryPageState.kSurfaceColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.02)),
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: isDark
+            ? Border.all(color: colors.border.withValues(alpha: 0.5))
+            : null,
+        boxShadow: isDark
+            ? null
+            : [
+                BoxShadow(
+                  color: const Color(0xFF0F172A).withValues(alpha: 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
       ),
       child: Row(
         children: [
@@ -201,10 +214,10 @@ class _HistoryItem extends StatelessWidget {
             children: [
               Text(
                 activity.time,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 15,
-                  color: _AttendanceHistoryPageState.kTextPrimary,
+                  color: colors.textPrimary,
                 ),
               ),
               const SizedBox(height: 4),
@@ -212,9 +225,7 @@ class _HistoryItem extends StatelessWidget {
                 width: 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: activity.isLate
-                      ? Colors.orange
-                      : const Color(0xff5a64d6),
+                  color: activity.isLate ? colors.warning : colors.accent,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -226,7 +237,7 @@ class _HistoryItem extends StatelessWidget {
           Container(
             height: 40,
             width: 1,
-            color: Colors.white.withValues(alpha: 0.1),
+            color: colors.border.withValues(alpha: 0.3),
           ),
           const SizedBox(width: 16),
 
@@ -236,22 +247,20 @@ class _HistoryItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  activity.description + (activity.isLate ? " (Late)" : ""),
+                  activity.description +
+                      (activity.isLate ? " (Terlambat)" : ""),
                   style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
                     color: activity.isLate
-                        ? Colors.orange
-                        : _AttendanceHistoryPageState.kTextPrimary,
+                        ? colors.warning
+                        : colors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   activity.location,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: _AttendanceHistoryPageState.kTextSecondary,
-                  ),
+                  style: TextStyle(fontSize: 13, color: colors.textSecondary),
                 ),
               ],
             ),

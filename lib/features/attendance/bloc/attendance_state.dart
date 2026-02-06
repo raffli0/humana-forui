@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:latlong2/latlong.dart';
+import '../models/attendance_model.dart';
 
 enum AttendanceStatus { initial, loading, success, error }
 
@@ -12,7 +13,7 @@ enum AttendanceSuccessType { none, checkIn, checkOut, breakStart, breakEnd }
 class AttendanceState extends Equatable {
   final AttendanceStatus status;
   final String? errorMessage;
-  final AttendanceSuccessType successType; // New field
+  final AttendanceSuccessType successType;
 
   final AttendanceMainStatus mainStatus;
   final BreakStatus breakStatus;
@@ -30,6 +31,7 @@ class AttendanceState extends Equatable {
   final String? shiftEnd;
   final int toleranceMinutes;
   final bool isShiftValid;
+  final List<AttendanceModel> attendanceHistory;
 
   const AttendanceState({
     this.status = AttendanceStatus.initial,
@@ -48,6 +50,7 @@ class AttendanceState extends Equatable {
     this.shiftEnd,
     this.toleranceMinutes = 0,
     this.isShiftValid = false,
+    this.attendanceHistory = const [],
   });
 
   AttendanceState copyWith({
@@ -67,6 +70,7 @@ class AttendanceState extends Equatable {
     String? shiftEnd,
     int? toleranceMinutes,
     bool? isShiftValid,
+    List<AttendanceModel>? attendanceHistory,
   }) {
     return AttendanceState(
       status: status ?? this.status,
@@ -85,6 +89,7 @@ class AttendanceState extends Equatable {
       shiftEnd: shiftEnd ?? this.shiftEnd,
       toleranceMinutes: toleranceMinutes ?? this.toleranceMinutes,
       isShiftValid: isShiftValid ?? this.isShiftValid,
+      attendanceHistory: attendanceHistory ?? this.attendanceHistory,
     );
   }
 
@@ -106,5 +111,6 @@ class AttendanceState extends Equatable {
     shiftEnd,
     toleranceMinutes,
     isShiftValid,
+    attendanceHistory,
   ];
 }

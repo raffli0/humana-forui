@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:developer';
 import 'dart:io';
 import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img;
 
 class CameraService {
   CameraController? _controller;
@@ -19,7 +20,7 @@ class CameraService {
 
       _controller = CameraController(
         frontCamera,
-        ResolutionPreset.medium,
+        ResolutionPreset.max,
         enableAudio: false,
       );
 
@@ -57,6 +58,23 @@ class CameraService {
       }
     } catch (e) {
       log('Error deleting file: $e');
+    }
+  }
+
+  /// Horizontally flips the image at the given [path].
+  Future<void> flipImage(String path) async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      final image = img.decodeImage(bytes);
+      if (image != null) {
+        final flipped = img.flip(
+          image,
+          direction: img.FlipDirection.horizontal,
+        );
+        await File(path).writeAsBytes(img.encodeJpg(flipped, quality: 100));
+      }
+    } catch (e) {
+      log("Error flipping image: $e");
     }
   }
 

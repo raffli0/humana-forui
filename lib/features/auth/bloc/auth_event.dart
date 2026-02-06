@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:equatable/equatable.dart';
 
 abstract class AuthEvent extends Equatable {
@@ -21,14 +22,14 @@ class AuthRegisterRequested extends AuthEvent {
   final String fullName;
   final String email;
   final String password;
-  final String companyName;
+  final String? companyName;
   final String role;
 
   const AuthRegisterRequested({
     required this.fullName,
     required this.email,
     required this.password,
-    required this.companyName,
+    this.companyName,
     required this.role,
   });
 
@@ -64,6 +65,15 @@ class AuthProfileUpdateRequested extends AuthEvent {
     manager,
     companyName,
   ];
+}
+
+class AuthProfilePhotoUpdateRequested extends AuthEvent {
+  final File imageFile;
+
+  const AuthProfilePhotoUpdateRequested(this.imageFile);
+
+  @override
+  List<Object?> get props => [imageFile];
 }
 
 class AuthLogoutRequested extends AuthEvent {}

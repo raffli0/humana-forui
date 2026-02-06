@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../shared/widgets/app_header.dart';
+import '../../../core/theme/app_colors.dart';
 import '../bloc/auth_bloc.dart';
 import '../bloc/auth_event.dart';
 import '../bloc/auth_state.dart';
@@ -60,19 +61,19 @@ class _LoginViewState extends State<LoginView> {
     final cleanError = error.replaceAll("Exception: ", "");
 
     if (cleanError.contains("user-not-found")) {
-      return "No user found for that email.";
+      return "Pengguna tidak ditemukan dengan email tersebut.";
     } else if (cleanError.contains("wrong-password")) {
-      return "Wrong password provided.";
+      return "Kata sandi salah.";
     } else if (cleanError.contains("invalid-email")) {
-      return "The email address is invalid.";
+      return "Alamat email tidak valid.";
     } else if (cleanError.contains("user-disabled")) {
-      return "This user account has been disabled.";
+      return "Akun pengguna ini telah dinonaktifkan.";
     } else if (cleanError.contains("too-many-requests")) {
-      return "Too many login attempts. Please try again later.";
+      return "Terlalu banyak percobaan masuk. Coba lagi nanti.";
     } else if (cleanError.contains("network-request-failed")) {
-      return "Network error. Check your connection.";
+      return "Kesalahan jaringan. Periksa koneksi Anda.";
     } else if (cleanError.contains("email-already-in-use")) {
-      return "Email is already in use.";
+      return "Email sudah terdaftar.";
     }
 
     return cleanError;
@@ -80,12 +81,13 @@ class _LoginViewState extends State<LoginView> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return BlocListener<AuthBloc, AuthState>(
       listener: (context, state) {
         if (state.status == AuthStatus.authenticated) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Login successful'),
+              content: Text('Berhasil masuk'),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
             ),
@@ -112,12 +114,12 @@ class _LoginViewState extends State<LoginView> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF0E0F13), // kBgColor
+        backgroundColor: colors.background,
         body: SafeArea(
           child: Column(
             children: [
               const AppHeader(
-                title: "Sign In",
+                title: "Masuk",
                 showAvatar: false,
                 showBell: false,
               ),
@@ -135,10 +137,10 @@ class _LoginViewState extends State<LoginView> {
                       Container(
                         padding: const EdgeInsets.all(24),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF151821), // kSurfaceColor
+                          color: colors.surface,
                           borderRadius: BorderRadius.circular(24),
                           border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.05),
+                            color: colors.border.withValues(alpha: 0.3),
                           ),
                         ),
                         child: Form(
@@ -146,58 +148,54 @@ class _LoginViewState extends State<LoginView> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.lock_person_rounded,
                                 size: 64,
-                                color: Color(0xFF7C7FFF), // kAccentColor
+                                color: colors.accent,
                               ),
                               const SizedBox(height: 24),
-                              const Text(
-                                "Welcome Back",
+                              Text(
+                                "Selamat Datang Kembali",
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 26,
                                   fontWeight: FontWeight.bold,
-                                  color: Color(0xFFEDEDED), // kTextPrimary
+                                  color: colors.textPrimary,
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              const Text(
-                                "Login to your account",
+                              Text(
+                                "Masuk ke akun Anda",
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   fontSize: 15,
-                                  color: Color(0xFF9AA0AA), // kTextSecondary
+                                  color: colors.textSecondary,
                                 ),
                               ),
                               const SizedBox(height: 32),
                               TextFormField(
                                 controller: _emailController,
-                                style: const TextStyle(
-                                  color: Color(0xFFEDEDED),
-                                ),
+                                style: TextStyle(color: colors.textPrimary),
                                 decoration: InputDecoration(
                                   labelText: 'Email',
-                                  hintText: 'Enter your email',
-                                  labelStyle: const TextStyle(
-                                    color: Color(0xFF9AA0AA),
+                                  hintText: 'Masukkan email Anda',
+                                  labelStyle: TextStyle(
+                                    color: colors.textSecondary,
                                   ),
-                                  helperStyle: const TextStyle(
-                                    color: Color(0xFF9AA0AA),
+                                  helperStyle: TextStyle(
+                                    color: colors.textSecondary,
                                   ),
-                                  hintStyle: const TextStyle(
-                                    color: Color(0xFF4B4F58),
-                                  ),
+                                  hintStyle: TextStyle(color: colors.border),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFF4B4F58),
+                                    borderSide: BorderSide(
+                                      color: colors.border,
                                     ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFF7C7FFF),
+                                    borderSide: BorderSide(
+                                      color: colors.accent,
                                     ),
                                   ),
                                   errorBorder: OutlineInputBorder(
@@ -218,7 +216,7 @@ class _LoginViewState extends State<LoginView> {
                                     return 'Required';
                                   }
                                   if (!value.contains('@')) {
-                                    return 'Invalid email';
+                                    return 'Email tidak valid';
                                   }
                                   return null;
                                 },
@@ -227,28 +225,24 @@ class _LoginViewState extends State<LoginView> {
                               TextFormField(
                                 controller: _passwordController,
                                 obscureText: !_isPasswordVisible,
-                                style: const TextStyle(
-                                  color: Color(0xFFEDEDED),
-                                ),
+                                style: TextStyle(color: colors.textPrimary),
                                 decoration: InputDecoration(
-                                  labelText: 'Password',
-                                  hintText: 'Enter your password',
-                                  labelStyle: const TextStyle(
-                                    color: Color(0xFF9AA0AA),
+                                  labelText: 'Kata Sandi',
+                                  hintText: 'Masukkan kata sandi Anda',
+                                  labelStyle: TextStyle(
+                                    color: colors.textSecondary,
                                   ),
-                                  hintStyle: const TextStyle(
-                                    color: Color(0xFF4B4F58),
-                                  ),
+                                  hintStyle: TextStyle(color: colors.border),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFF4B4F58),
+                                    borderSide: BorderSide(
+                                      color: colors.border,
                                     ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                      color: Color(0xFF7C7FFF),
+                                    borderSide: BorderSide(
+                                      color: colors.accent,
                                     ),
                                   ),
                                   errorBorder: OutlineInputBorder(
@@ -268,7 +262,7 @@ class _LoginViewState extends State<LoginView> {
                                       _isPasswordVisible
                                           ? Icons.visibility
                                           : Icons.visibility_off,
-                                      color: const Color(0xFF9AA0AA),
+                                      color: colors.textSecondary,
                                     ),
                                     onPressed: () {
                                       setState(() {
@@ -283,7 +277,7 @@ class _LoginViewState extends State<LoginView> {
                                     return 'Required';
                                   }
                                   if (value.length < 6) {
-                                    return 'Too short';
+                                    return 'Terlalu pendek';
                                   }
                                   return null;
                                 },
@@ -299,9 +293,7 @@ class _LoginViewState extends State<LoginView> {
                                           ? null
                                           : _onLogin,
                                       style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFF7C7FFF,
-                                        ),
+                                        backgroundColor: colors.accent,
                                         foregroundColor: Colors.white,
                                         shape: RoundedRectangleBorder(
                                           borderRadius: BorderRadius.circular(
@@ -320,7 +312,7 @@ class _LoginViewState extends State<LoginView> {
                                               ),
                                             )
                                           : const Text(
-                                              'Login',
+                                              'Masuk',
                                               style: TextStyle(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.bold,
@@ -334,9 +326,11 @@ class _LoginViewState extends State<LoginView> {
                               Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  const Text(
-                                    "Don't have an account? ",
-                                    style: TextStyle(color: Color(0xFF9AA0AA)),
+                                  Text(
+                                    "Belum punya akun? ",
+                                    style: TextStyle(
+                                      color: colors.textSecondary,
+                                    ),
                                   ),
                                   GestureDetector(
                                     onTap: () {
@@ -346,10 +340,10 @@ class _LoginViewState extends State<LoginView> {
                                         ),
                                       );
                                     },
-                                    child: const Text(
-                                      "Register",
+                                    child: Text(
+                                      "Daftar",
                                       style: TextStyle(
-                                        color: Color(0xFF7C7FFF),
+                                        color: colors.accent,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),

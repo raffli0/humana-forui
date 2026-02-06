@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:humana/core/theme/app_colors.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 class FaceScanPage extends StatefulWidget {
@@ -266,11 +267,11 @@ class _FaceScanPageState extends State<FaceScanPage>
     );
   }
 
-  // UI / BUILD
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
-      backgroundColor: const Color(0xff0c202e),
+      backgroundColor: colors.accent,
       body: Stack(
         children: [
           /// CAMERA PREVIEW
@@ -320,7 +321,7 @@ class _FaceScanPageState extends State<FaceScanPage>
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xff5a64d6).withValues(alpha: 0.3),
+                          color: colors.accentSecondary.withValues(alpha: 0.3),
                           blurRadius: 35,
                           spreadRadius: 4,
                         ),
@@ -340,9 +341,9 @@ class _FaceScanPageState extends State<FaceScanPage>
                             borderRadius: BorderRadius.circular(20),
                             gradient: LinearGradient(
                               colors: [
-                                const Color(0xff5a64d6).withValues(alpha: 0),
-                                const Color(0xff5a64d6),
-                                const Color(0xff5a64d6).withValues(alpha: 0),
+                                colors.accentSecondary.withValues(alpha: 0),
+                                colors.accentSecondary,
+                                colors.accentSecondary.withValues(alpha: 0),
                               ],
                             ),
                           ),
@@ -443,8 +444,8 @@ class _FaceScanPageState extends State<FaceScanPage>
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(50),
-                  gradient: const LinearGradient(
-                    colors: [Color(0xff5a64d6), Color(0xff7c85e8)],
+                  gradient: LinearGradient(
+                    colors: [colors.surface, colors.surface],
                   ),
                 ),
                 child: const Center(

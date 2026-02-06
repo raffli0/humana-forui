@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:shift/utils/reverse_geocoding.dart';
+import 'package:humana/utils/reverse_geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 
 class LocationService {

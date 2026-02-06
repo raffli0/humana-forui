@@ -1,9 +1,8 @@
 import 'dart:async';
 import 'dart:developer' as developer;
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../auth/models/user_model.dart';
-import 'package:shift/core/services/location_service.dart';
-import 'package:shift/core/services/config_service.dart';
+import 'package:humana/core/services/location_service.dart';
+import 'package:humana/core/services/config_service.dart';
 import '../../auth/services/auth_service.dart';
 import '../services/attendance_service.dart';
 import 'package:latlong2/latlong.dart';
@@ -24,20 +23,17 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
 
   static const double _geoCacheDistanceMeter = 30;
   final String companyId;
-  final UserModel? _user;
 
   AttendanceBloc({
     required LocationService locationService,
     ConfigService? configService,
     AttendanceService? attendanceService,
     AuthService? authService,
-    UserModel? user,
     required this.companyId,
   }) : _locationService = locationService,
        _configService = configService ?? ConfigService(),
        _attendanceService = attendanceService ?? AttendanceService(),
        _authService = authService ?? AuthService(),
-       _user = user,
        super(AttendanceState(now: DateTime.now())) {
     on<AttendanceStarted>(_onStarted);
     on<AttendanceLocationUpdated>(_onLocationUpdated);
@@ -65,13 +61,35 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
 
       // Fetch Shift Config (Global Default)
       final shiftConfig = await _configService.getShiftConfig(companyId);
-      final defaultStart = shiftConfig['start_time'] as String? ?? "09:00";
-      final defaultEnd = shiftConfig['end_time'] as String? ?? "17:00";
-      final tolerance = shiftConfig['tolerance_time'] as int? ?? 0;
+      final defaultStart = shiftConfig['start_time'] as String?;
+      final defaultEnd = shiftConfig['end_time'] as String?;
+      final globalTolerance = shiftConfig['tolerance_time'] as int? ?? 0;
 
       // Determine Effective Shift (Override > Default)
-      final shiftStart = _user?.shiftStart ?? defaultStart;
-      final shiftEnd = _user?.shiftEnd ?? defaultEnd;
+      // 1.1 Refresh User Data to get joined Shifts
+      final freshUser = await _authService.checkAuthStatus();
+      final shiftStart = freshUser?.shiftStart ?? defaultStart;
+      final shiftEnd = freshUser?.shiftEnd ?? defaultEnd;
+
+      // Use user-specific tolerance if available (User Model defaults to 0 if missing)
+      // If user has a shift assigned, we prefer that shift's tolerance.
+      // Assuming if freshUser is not null, and has toleranceMinutes, we use it.
+      // Note: UserModel defaults toleranceMinutes to 0.
+      // If the specific shift HAS 0 tolerance, we want 0.
+      // So we should check if 'shifts' relation existed?
+      // Actually, if a user is assigned a shift, that shift DEFINES the rules.
+      // So checking freshUser.toleranceMinutes is correct. But what if it's 0 and Global is 5?
+      // Usually specific overrides global. If specific is 0, then 0 it is.
+      // But if user has NO shift assigned (null), then we use keys from global?
+      // UserModel logic: `json['shifts']?['tolerance_time']`. If `shifts` is null, returns 0.
+      // So if User has basic profile but no shift assigned, tolerance is 0.
+      // Ideally we want to fallback to Global if User has NO shift.
+
+      int tolerance = globalTolerance;
+      if (freshUser?.shiftStart != null) {
+        // Implies user has a specific shift assigned
+        tolerance = freshUser!.toleranceMinutes;
+      }
 
       final now = DateTime.now();
       final isShiftValid = _validateShift(now, shiftStart, shiftEnd);
@@ -90,7 +108,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       // 2. Check Initial Attendance Status
       final user = _authService.currentUser;
       if (user != null) {
-        final today = await _attendanceService.getTodayAttendance(user.uid);
+        final today = await _attendanceService.getTodayAttendance(user.id);
         if (today != null) {
           AttendanceMainStatus mainStatus;
           BreakStatus breakStatus = BreakStatus.none;
@@ -196,19 +214,30 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     Emitter<AttendanceState> emit,
   ) {
     final now = event.now;
-    final isValid = _validateShift(
-      now,
-      state.shiftStart ?? "09:00",
-      state.shiftEnd ?? "17:00",
-    );
+    final isValid = _validateShift(now, state.shiftStart, state.shiftEnd);
     emit(state.copyWith(now: now, isShiftValid: isValid));
   }
 
-  void _onTabChanged(
+  Future<void> _onTabChanged(
     AttendanceTabChanged event,
     Emitter<AttendanceState> emit,
-  ) {
+  ) async {
     emit(state.copyWith(tabIndex: event.index));
+    if (event.index == 1) {
+      await _fetchHistory(emit);
+    }
+  }
+
+  Future<void> _fetchHistory(Emitter<AttendanceState> emit) async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+
+    try {
+      final history = await _attendanceService.getUserAttendance(user.id);
+      emit(state.copyWith(attendanceHistory: history));
+    } catch (e) {
+      developer.log("Error fetching history: $e", name: "AttendanceBloc");
+    }
   }
 
   Future<void> _onCheckIn(
@@ -239,8 +268,18 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
 
       // Validate Shift Timing
       final now = state.now;
-      final shiftStartStr = state.shiftStart ?? "09:00";
-      final shiftEndStr = state.shiftEnd ?? "17:00";
+      final shiftStartStr = state.shiftStart;
+      final shiftEndStr = state.shiftEnd;
+
+      if (shiftStartStr == null || shiftEndStr == null) {
+        emit(
+          state.copyWith(
+            status: AttendanceStatus.error,
+            errorMessage: "No shift assigned for today.",
+          ),
+        );
+        return;
+      }
 
       final startParts = shiftStartStr.split(':');
       final endParts = shiftEndStr.split(':');
@@ -308,8 +347,9 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       }
 
       await _attendanceService.checkIn(
-        userId: user.uid,
-        userName: user.displayName ?? "Employee", // Fallback name
+        userId: user.id,
+        userName:
+            user.userMetadata?['full_name'] ?? "Employee", // Fallback name
         companyId: companyId,
         location: locationString,
         status: status,
@@ -317,6 +357,9 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
         longitude: state.userLatLng!.longitude,
         insideOffice: state.isInsideOffice,
         imageFile: event.imageFile,
+        shiftStart: shiftStartStr,
+        shiftEnd: shiftEndStr,
+        tolerance: state.toleranceMinutes,
       );
 
       emit(
@@ -353,7 +396,7 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       if (user == null) throw Exception("User not authenticated");
 
       // Get today's attendance to find ID
-      final today = await _attendanceService.getTodayAttendance(user.uid);
+      final today = await _attendanceService.getTodayAttendance(user.id);
       if (today == null) throw Exception("No active check-in found");
 
       final locationString = state.currentAddress.isNotEmpty
@@ -363,6 +406,8 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       await _attendanceService.checkOut(
         attendanceId: today.id,
         location: locationString,
+        latitude: state.userLatLng?.latitude ?? 0.0,
+        longitude: state.userLatLng?.longitude ?? 0.0,
         imageFile: null,
       );
 
@@ -399,10 +444,10 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       final user = _authService.currentUser;
       if (user == null) throw Exception("User not authenticated");
 
-      final today = await _attendanceService.getTodayAttendance(user.uid);
+      final today = await _attendanceService.getTodayAttendance(user.id);
       if (today == null) throw Exception("No active attendance found");
 
-      await _attendanceService.startBreak(today.id);
+      // await _attendanceService.startBreak(today.id); // Disabled: Column missing in DB
 
       emit(
         state.copyWith(
@@ -436,10 +481,10 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
       final user = _authService.currentUser;
       if (user == null) throw Exception("User not authenticated");
 
-      final today = await _attendanceService.getTodayAttendance(user.uid);
+      final today = await _attendanceService.getTodayAttendance(user.id);
       if (today == null) throw Exception("No active attendance found");
 
-      await _attendanceService.endBreak(today.id);
+      // await _attendanceService.endBreak(today.id); // Disabled: Column missing in DB
 
       emit(
         state.copyWith(
@@ -460,7 +505,8 @@ class AttendanceBloc extends Bloc<AttendanceEvent, AttendanceState> {
     }
   }
 
-  bool _validateShift(DateTime now, String startStr, String endStr) {
+  bool _validateShift(DateTime now, String? startStr, String? endStr) {
+    if (startStr == null || endStr == null) return false;
     try {
       final startParts = startStr.split(':');
       final endParts = endStr.split(':');

@@ -1,20 +1,18 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:shift/features/auth/models/user_model.dart';
+import 'dart:io';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:humana/features/auth/models/user_model.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final SupabaseClient _supabase = Supabase.instance.client;
   static const _storage = FlutterSecureStorage();
 
-  User? get currentUser => _auth.currentUser;
+  User? get currentUser => _supabase.auth.currentUser;
 
-  Future<void> _saveToken(User? user) async {
-    if (user != null) {
-      final token = await user.getIdToken();
-      await _storage.write(key: 'access_token', value: token);
+  Future<void> _saveToken(Session? session) async {
+    if (session != null) {
+      await _storage.write(key: 'access_token', value: session.accessToken);
     }
   }
 
@@ -22,46 +20,57 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    final UserCredential credential = await _auth.signInWithEmailAndPassword(
+    final AuthResponse response = await _supabase.auth.signInWithPassword(
       email: email,
       password: password,
     );
 
-    if (credential.user == null) {
+    if (response.user == null) {
       throw Exception("Login failed");
     }
 
-    // Fetch extra data from Firestore
-    final doc = await _firestore
-        .collection('users')
-        .doc(credential.user!.uid)
-        .get();
+    await _saveToken(response.session);
 
-    if (!doc.exists) {
-      // Create a default user if somehow missing in Firestore
-      final newUser = UserModel(
-        id: credential.user!.uid,
-        fullName: credential.user!.displayName ?? "User",
-        email: email,
-        role: "admin",
+    // Fetch extra data based on role from metadata
+    final metadata = response.user!.userMetadata ?? {};
+    final role =
+        metadata['role'] as String? ??
+        'employee'; // Default to employee for old users
+    final table = role == 'candidate' ? 'candidates' : 'employees';
+
+    // Fetch extra data from Supabase table
+    final data = await _supabase
+        .from(table)
+        .select(role == 'candidate' ? '*, recruitments(title)' : '*, shifts(*)')
+        .eq('id', response.user!.id)
+        .maybeSingle();
+
+    if (data == null) {
+      // Fallback if profile missing
+      return UserModel(
+        id: response.user!.id,
+        email: response.user!.email ?? email,
+        fullName: metadata['full_name'] ?? 'User',
+        role: role,
+        status: 'active',
       );
-      await _firestore
-          .collection('users')
-          .doc(credential.user!.uid)
-          .set(newUser.toJson());
-      return newUser;
     }
 
-    final userData = doc.data()!;
+    final userData = Map<String, dynamic>.from(data);
+    // Inject role from metadata if missing in table (candidates table has no role column)
+    if (!userData.containsKey('role')) {
+      userData['role'] = role;
+    }
+    // Map 'full_name' to 'name' if necessary (candidates table uses full_name, model uses name)
+    if (userData.containsKey('full_name') && !userData.containsKey('name')) {
+      userData['name'] = userData['full_name'];
+    }
+
     final status = userData['status'] as String? ?? 'active';
     if (status.toLowerCase() == 'inactive') {
-      await _auth.signOut(); // Ensure they are not left signed in
+      await _supabase.auth.signOut(); // Ensure they are not left signed in
       throw Exception("Your account is deactivated. Please contact admin.");
     }
-
-    // Token persistence is handled by Firebase Auth SDK
-    // No need to manually save token for Dio anymore
-    // await _saveToken(credential.user);
 
     return UserModel.fromJson(userData);
   }
@@ -70,75 +79,70 @@ class AuthService {
     required String fullName,
     required String email,
     required String password,
-    required String companyName,
+    String? companyName,
     required String role,
   }) async {
-    // 0. Pre-check for Company (Employee only)
+    // 0. Pre-check for Company (Required if role is NOT candidate and companyName provided)
     String? companyId;
-    if (role == 'employee') {
-      final companyQuery = await _firestore
-          .collection('companies')
-          .where('name', isEqualTo: companyName)
-          .limit(1)
-          .get();
+    if (companyName != null && companyName.isNotEmpty && role != 'candidate') {
+      final List<dynamic> companies = await _supabase
+          .from('companies')
+          .select()
+          .eq('name', companyName)
+          .limit(1);
 
-      if (companyQuery.docs.isEmpty) {
+      if (companies.isEmpty) {
         throw Exception(
           "Company '$companyName' not found. Please check spelling.",
         );
       }
-      companyId = companyQuery.docs.first.id;
+      companyId = companies.first['id'] as String;
+    } else if (role != 'candidate') {
+      // If role is employee but no company name provided
+      throw Exception("Company name is required for employees.");
     }
 
     // 1. Create Auth Account
-    final UserCredential credential = await _auth
-        .createUserWithEmailAndPassword(email: email, password: password);
+    final AuthResponse response = await _supabase.auth.signUp(
+      email: email,
+      password: password,
+      data: {'full_name': fullName, 'role': role},
+    );
 
-    if (credential.user == null) {
+    if (response.user == null) {
       throw Exception("Registration failed");
     }
 
-    final uid = credential.user!.uid;
+    await _saveToken(response.session);
+    final uid = response.user!.id;
 
-    // 2. Run Firestore Transaction to create Company (if admin) and User profile
-    return await _firestore.runTransaction((transaction) async {
-      String finalCompanyId = companyId ?? "";
+    final user = UserModel(
+      id: uid,
+      fullName: fullName,
+      email: email,
+      role: role, // Use passed role
+      companyId: companyId,
+    );
 
-      // Create NEW company if Admin
-      if (role == 'admin') {
-        final companyRef = _firestore.collection('companies').doc();
-        transaction.set(companyRef, {
-          'name': companyName,
-          'created_at': FieldValue.serverTimestamp(),
-          'updated_at': FieldValue.serverTimestamp(),
-        });
-        finalCompanyId = companyRef.id;
-      }
+    // 2. Create User Profile in public table
+    // Note: 'status' usually defaults to 'pending' or 'active' in DB.
+    if (role == 'candidate') {
+      await _supabase.from('candidates').insert({
+        'id': uid,
+        'full_name': fullName, // Correct column name
+        'email': email,
+        // 'role' column does not exist in candidates table
+        'status': 'active',
+      });
+    } else {
+      await _supabase.from('employees').insert(user.toJson());
+    }
 
-      // Update Firebase Auth display name (optional but good)
-      await credential.user!.updateDisplayName(fullName);
-
-      final user = UserModel(
-        id: uid,
-        fullName: fullName,
-        email: email,
-        role: role,
-        companyId: finalCompanyId,
-      );
-
-      // Create User Profile linked to the company
-      final userRef = _firestore.collection('users').doc(uid);
-      transaction.set(userRef, user.toJson());
-
-      // Save token for Dio
-      await _saveToken(credential.user);
-
-      return user;
-    });
+    return user;
   }
 
   Future<void> logout() async {
-    await _auth.signOut();
+    await _supabase.auth.signOut();
     // Clear ALL secure storage
     await _storage.deleteAll();
     // Clear SharedPreferences but keep 'seenOnboarding' and 'admin_last_cleared_' keys
@@ -178,127 +182,199 @@ class AuthService {
     String? manager,
     String? companyName,
   }) async {
-    final user = _auth.currentUser;
+    final user = _supabase.auth.currentUser;
     if (user == null) throw Exception("User not authenticated");
 
-    // Fetch current user data to get companyId
-    final userDoc = await _firestore.collection('users').doc(user.uid).get();
-    final userData = userDoc.data();
-    final companyId = userData?['company_id'];
+    // Get user role from metadata
+    final userRole = user.userMetadata?['role'] as String?;
+    final isCandidate = userRole == 'candidate';
 
-    await user.updateDisplayName(fullName);
+    // Update Auth Metadata - ONLY update fullName, NOT email
+    // Updating email in Auth will logout user and require verification
+    await _supabase.auth.updateUser(
+      UserAttributes(data: {'full_name': fullName}),
+    );
 
-    // Update Firestore User
-    final Map<String, dynamic> updateData = {
-      'full_name': fullName,
-      'email': email,
-    };
-    if (phone != null) updateData['phone'] = phone;
-    if (department != null) updateData['department'] = department;
-    if (manager != null) updateData['manager'] = manager;
+    if (isCandidate) {
+      // Update Candidates Table
+      final Map<String, dynamic> updateData = {
+        'full_name': fullName,
+        'email': email,
+      };
+      if (phone != null) updateData['phone'] = phone;
 
-    await _firestore.collection('users').doc(user.uid).update(updateData);
+      await _supabase.from('candidates').update(updateData).eq('id', user.id);
 
-    // Update Company Name if provided and user is admin
-    if (companyName != null && companyName.isNotEmpty && companyId != null) {
-      await _firestore.collection('companies').doc(companyId).update({
-        'name': companyName,
-        'updated_at': FieldValue.serverTimestamp(),
-      });
+      // Fetch updated candidate
+      final updatedDoc = await _supabase
+          .from('candidates')
+          .select('*, recruitments(title)')
+          .eq('id', user.id)
+          .single();
+
+      // CRITICAL: Inject role and map full_name to name for UserModel
+      final userData = Map<String, dynamic>.from(updatedDoc);
+      userData['role'] = 'candidate'; // Preserve role
+      if (userData.containsKey('full_name') && !userData.containsKey('name')) {
+        userData['name'] = userData['full_name']; // Map for UserModel
+      }
+
+      return UserModel.fromJson(userData);
+    } else {
+      // Update Employees Table
+      final Map<String, dynamic> updateData = {
+        'name': fullName,
+        'email': email,
+      };
+      if (phone != null) updateData['phone'] = phone;
+      if (department != null) updateData['department'] = department;
+      if (manager != null) updateData['manager'] = manager;
+
+      await _supabase.from('employees').update(updateData).eq('id', user.id);
+
+      // Fetch updated employee
+      final updatedDoc = await _supabase
+          .from('employees')
+          .select('*, shifts(*)')
+          .eq('id', user.id)
+          .single();
+
+      return UserModel.fromJson(updatedDoc);
     }
+  }
 
-    // Fetch updated user
-    final doc = await _firestore.collection('users').doc(user.uid).get();
-    return UserModel.fromJson(doc.data()!);
+  Future<UserModel> updateProfilePhoto(File imageFile) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception("User not authenticated");
+
+    try {
+      final fileExt = imageFile.path.split('.').last;
+      final fileName =
+          '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$fileExt';
+
+      // 1. Upload to Storage
+      await _supabase.storage
+          .from('avatars')
+          .upload(
+            fileName,
+            imageFile,
+            fileOptions: const FileOptions(upsert: true),
+          );
+
+      final imageUrl = _supabase.storage.from('avatars').getPublicUrl(fileName);
+
+      // 2. Determine Table and Update DB
+      final metadata = user.userMetadata ?? {};
+      final role = metadata['role'] as String? ?? 'employee';
+      final table = role == 'candidate' ? 'candidates' : 'employees';
+
+      await _supabase
+          .from(table)
+          .update({'avatar': imageUrl})
+          .eq('id', user.id);
+
+      // Also update central profiles table for consistency
+      try {
+        await _supabase
+            .from('profiles')
+            .update({'avatar_url': imageUrl})
+            .eq('id', user.id);
+      } catch (e) {
+        // Silently fail if profiles update fails, as the main table is updated
+        print('Warning: Failed to update profiles table: $e');
+      }
+
+      // 3. Return updated user
+      final doc = await _supabase
+          .from(table)
+          .select(
+            role == 'candidate' ? '*, recruitments(title)' : '*, shifts(*)',
+          )
+          .eq('id', user.id)
+          .single();
+
+      // Ensure local state reflects update immediately
+      final Map<String, dynamic> responseData = Map<String, dynamic>.from(doc);
+      responseData['avatar'] = imageUrl;
+
+      // Inject role and map names if candidate
+      if (!responseData.containsKey('role')) {
+        responseData['role'] = role;
+      }
+      if (responseData.containsKey('full_name') &&
+          !responseData.containsKey('name')) {
+        responseData['name'] = responseData['full_name'];
+      }
+
+      return UserModel.fromJson(responseData);
+    } catch (e) {
+      throw Exception("Failed to upload photo: $e");
+    }
   }
 
   Future<String?> getCompanyName(String companyId) async {
-    final doc = await _firestore.collection('companies').doc(companyId).get();
-    if (doc.exists) {
-      return doc.data()?['name'] as String?;
+    final List<dynamic> response = await _supabase
+        .from('companies')
+        .select('name')
+        .eq('id', companyId);
+
+    if (response.isNotEmpty) {
+      return response.first['name'] as String?;
     }
     return null;
   }
 
-  // --- Admin Features ---
-
-  Future<void> createEmployeeProfile(UserModel user) async {
-    // Create a placeholder document.
-    // Since we don't have a UID yet (user hasn't registered),
-    // we use a random ID or email as key?
-    // Better: Auto-generate ID. Logic in register() handles matching by email.
-
-    final docRef = _firestore.collection('users').doc();
-    await docRef.set({
-      'full_name': user.fullName,
-      'email': user.email,
-      'role': user.role, // Use role from model
-      'company_id': user.companyId,
-      'id': docRef.id, // Use generated ID
-    });
-  }
-
-  Future<void> updateUser(UserModel user) async {
-    // This is for Admin editing OTHER users.
-    // If the user has a proper UID, update that doc.
-    // If it's a placeholder (no auth yet), we need its doc ID.
-    // For simplicity in this plan, we assume we have the Firestore Doc ID if possible,
-    // but UserModel 'id' field maps to UID.
-
-    // If the user was fetched from Firestore, u.id should be the doc ID (either UID or random).
-    await _firestore.collection('users').doc(user.id).update(user.toJson());
-  }
-
-  Future<void> deleteUser(String uid) async {
-    // Deletes the user document.
-    // Note: We cannot delete the Auth account easily without Admin SDK backend.
-    // We only clean up the Firestore record.
-    await _firestore.collection('users').doc(uid).delete();
-  }
-
   Future<UserModel?> checkAuthStatus() async {
-    final user = _auth.currentUser;
+    final user = _supabase.auth.currentUser;
     if (user != null) {
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists && doc.data() != null) {
-        return UserModel.fromJson(doc.data()!);
+      // Get role from user metadata
+      final metadata = user.userMetadata ?? {};
+      final role =
+          metadata['role'] as String? ??
+          'employee'; // Default to employee for old users
+      final table = role == 'candidate' ? 'candidates' : 'employees';
+
+      try {
+        final doc = await _supabase
+            .from(table)
+            .select(
+              role == 'candidate' ? '*, recruitments(title)' : '*, shifts(*)',
+            )
+            .eq('id', user.id)
+            .maybeSingle();
+
+        if (doc == null) {
+          // Fallback if profile missing
+          return UserModel(
+            id: user.id,
+            email: user.email ?? '',
+            fullName: metadata['full_name'] ?? 'User',
+            role: role,
+            status: 'active',
+          );
+        }
+
+        final userData = Map<String, dynamic>.from(doc);
+        // Inject role from metadata if missing in table
+        if (!userData.containsKey('role')) {
+          userData['role'] = role;
+        }
+        // Map 'full_name' to 'name' if necessary
+        if (userData.containsKey('full_name') &&
+            !userData.containsKey('name')) {
+          userData['name'] = userData['full_name'];
+        }
+
+        return UserModel.fromJson(userData);
+      } catch (e) {
+        // If fetch fails, return null to log them out
+        return null;
       }
     }
     return null;
   }
 
-  Future<List<UserModel>> getAllUsers() async {
-    final user = await checkAuthStatus();
-    if (user?.companyId == null) return [];
-
-    final snapshot = await _firestore
-        .collection('users')
-        .where('company_id', isEqualTo: user!.companyId)
-        .get();
-    return snapshot.docs.map((doc) => UserModel.fromJson(doc.data())).toList();
-  }
-
-  Future<void> updateUserShift(
-    String userId,
-    String? start,
-    String? end,
-  ) async {
-    await _firestore.collection('users').doc(userId).update({
-      'shift_start': start,
-      'shift_end': end,
-    });
-  }
-
-  Future<void> batchUpdateUserShifts(
-    List<String> userIds,
-    String? start,
-    String? end,
-  ) async {
-    final batch = _firestore.batch();
-    for (final uid in userIds) {
-      final docRef = _firestore.collection('users').doc(uid);
-      batch.update(docRef, {'shift_start': start, 'shift_end': end});
-    }
-    await batch.commit();
+  Future<void> changePassword(String newPassword) async {
+    await _supabase.auth.updateUser(UserAttributes(password: newPassword));
   }
 }

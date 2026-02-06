@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shift/utils/liveness_action_util.dart';
+import 'package:humana/utils/liveness_action_util.dart';
 
 class FaceLivenessActionText extends StatelessWidget {
   final LivenessAction? action;
@@ -15,7 +15,7 @@ class FaceLivenessActionText extends StatelessWidget {
       child: Text(
         label,
         textAlign: TextAlign.center,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 24,
           color: Colors.white,
           fontWeight: FontWeight.bold,

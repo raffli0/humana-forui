@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:equatable/equatable.dart';
-import 'package:shift/utils/liveness_action_util.dart';
+import 'package:humana/utils/liveness_action_util.dart';
 
 enum LivenessStatus {
   initial,

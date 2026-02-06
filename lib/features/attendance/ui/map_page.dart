@@ -10,7 +10,7 @@ class MapPage extends StatefulWidget {
 class _MapPageState extends State<MapPage> {
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
+    return const SafeArea(
       child: Center(
         child: Text(
           'Map Page',

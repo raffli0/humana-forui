@@ -5,11 +5,12 @@ import 'dart:ui';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:shift/core/services/camera_service.dart';
-import 'package:shift/core/services/face_detector_service.dart';
-import 'package:shift/utils/liveness_action_util.dart';
+import 'package:humana/core/services/camera_service.dart';
+import 'package:humana/core/services/face_detector_service.dart';
+import 'package:humana/utils/liveness_action_util.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import 'liveness_event.dart';
 import 'liveness_state.dart';
 
@@ -208,6 +209,9 @@ class LivenessBloc extends Bloc<LivenessEvent, LivenessState> {
         // Capture image before completing
         try {
           final image = await _cameraService.takePicture();
+          if (image != null) {
+            await _cameraService.flipImage(image.path);
+          }
           emit(
             state.copyWith(
               status: LivenessStatus.completed,

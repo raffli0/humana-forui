@@ -1,9 +1,9 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ConfigService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  static const String _collection = 'settings';
+  final SupabaseClient _supabase = Supabase.instance.client;
+  static const String _table = 'settings';
 
   // Default fallback values
   static const double _defaultLat = -6.93586;
@@ -12,9 +12,22 @@ class ConfigService {
 
   Future<Map<String, dynamic>> getOfficeConfig(String companyId) async {
     try {
-      final doc = await _firestore.collection(_collection).doc(companyId).get();
-      if (doc.exists && doc.data() != null) {
-        return doc.data()!;
+      final response = await _supabase
+          .from(_table)
+          .select()
+          .eq('company_id', companyId)
+          .maybeSingle();
+
+      if (response != null) {
+        return {
+          'latitude': (response['latitude'] as num?)?.toDouble() ?? _defaultLat,
+          'longitude':
+              (response['longitude'] as num?)?.toDouble() ?? _defaultLng,
+          'radius': (response['radius'] as num?)?.toDouble() ?? _defaultRadius,
+          'start_time': response['start_time'], // If exists, else null
+          'end_time': response['end_time'],
+          'tolerance_time': response['tolerance_time'],
+        };
       }
       return {
         'latitude': _defaultLat,
@@ -37,10 +50,12 @@ class ConfigService {
     double lng,
     double radius,
   ) async {
-    await _firestore.collection(_collection).doc(companyId).set({
+    // Upsert mechanism
+    await _supabase.from(_table).upsert({
+      'company_id': companyId,
       'latitude': lat,
       'longitude': lng,
-      'radius': radius,
+      'radius': radius.toInt(),
     });
   }
 
@@ -63,8 +78,8 @@ class ConfigService {
   Future<Map<String, dynamic>> getShiftConfig(String companyId) async {
     final data = await getOfficeConfig(companyId);
     return {
-      'start_time': data['start_time'] as String? ?? '09:00',
-      'end_time': data['end_time'] as String? ?? '17:00',
+      'start_time': data['start_time'] as String?,
+      'end_time': data['end_time'] as String?,
       'tolerance_time': data['tolerance_time'] as int? ?? 0,
     };
   }
@@ -75,7 +90,9 @@ class ConfigService {
     String endTime,
     int toleranceTime,
   ) async {
-    await _firestore.collection(_collection).doc(companyId).update({
+    // Upsert
+    await _supabase.from(_table).upsert({
+      'company_id': companyId,
       'start_time': startTime,
       'end_time': endTime,
       'tolerance_time': toleranceTime,
@@ -83,19 +100,15 @@ class ConfigService {
   }
 
   // --- Multiple Shifts Implementation ---
+  // Using a separate 'shifts' table instead of subcollection
 
   Stream<List<Map<String, dynamic>>> streamShifts(String companyId) {
-    return _firestore
-        .collection(_collection)
-        .doc(companyId)
-        .collection('shifts')
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs.map((doc) {
-            final data = doc.data();
-            data['id'] = doc.id;
-            return data;
-          }).toList();
+    return _supabase
+        .from('shifts')
+        .stream(primaryKey: ['id'])
+        .eq('company_id', companyId)
+        .map((List<Map<String, dynamic>> data) {
+          return data;
         });
   }
 
@@ -103,12 +116,12 @@ class ConfigService {
     String companyId,
     Map<String, dynamic> shiftData,
   ) async {
-    // Generate a new ID if not present
-    await _firestore
-        .collection(_collection)
-        .doc(companyId)
-        .collection('shifts')
-        .add(shiftData);
+    shiftData['company_id'] = companyId;
+    // Remove 'id' if present to let DB generate it, or handle UUID generation here
+    if (shiftData.containsKey('id')) {
+      shiftData.remove('id');
+    }
+    await _supabase.from('shifts').insert(shiftData);
   }
 
   Future<void> updateShift(
@@ -116,20 +129,18 @@ class ConfigService {
     String shiftId,
     Map<String, dynamic> shiftData,
   ) async {
-    await _firestore
-        .collection(_collection)
-        .doc(companyId)
-        .collection('shifts')
-        .doc(shiftId)
-        .update(shiftData);
+    await _supabase
+        .from('shifts')
+        .update(shiftData)
+        .eq('id', shiftId)
+        .eq('company_id', companyId); // Safety check
   }
 
   Future<void> deleteShift(String companyId, String shiftId) async {
-    await _firestore
-        .collection(_collection)
-        .doc(companyId)
-        .collection('shifts')
-        .doc(shiftId)
-        .delete();
+    await _supabase
+        .from('shifts')
+        .delete()
+        .eq('id', shiftId)
+        .eq('company_id', companyId);
   }
 }

@@ -1,12 +1,12 @@
-# Shift Aplikasi Absensi Berbasis Mobile
+# Humana Aplikasi Absensi Berbasis Mobile
 
-Shift adalah aplikasi absensi karyawan berbasis Flutter yang dikembangkan untuk mempermudah proses pencatatan kehadiran secara digital. Aplikasi ini memanfaatkan teknologi lokasi (geofencing) dan verifikasi wajah (face liveness detection) untuk meningkatkan keamanan serta keakuratan data absensi.
+Humana adalah aplikasi absensi karyawan berbasis Flutter yang dikembangkan untuk mempermudah proses pencatatan kehadiran secara digital. Aplikasi ini memanfaatkan teknologi lokasi (geofencing) dan verifikasi wajah (face liveness detection) untuk meningkatkan keamanan serta keakuratan data absensi.
 
 Aplikasi ini dibuat sebagai proyek pengembangan aplikasi mobile dengan tujuan menerapkan konsep autentikasi, manajemen data, serta integrasi teknologi biometrik dan lokasi.
 
 ## Tujuan Pengembangan
 
-Tujuan dari pengembangan aplikasi Shift adalah:
+Tujuan dari pengembangan aplikasi Humana adalah:
 1. Meningkatkan akurasi pencatatan kehadiran karyawan.
 2. Mengurangi potensi kecurangan dalam proses absensi.
 3. Mempermudah admin dalam memantau kehadiran dan jam kerja.

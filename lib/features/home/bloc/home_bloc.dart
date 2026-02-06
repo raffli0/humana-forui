@@ -21,9 +21,9 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
   ) async {
     try {
       if (event.isStarting) {
-        await _attendanceService.startBreak(event.attendanceId);
+        // await _attendanceService.startBreak(event.attendanceId); // Disabled
       } else {
-        await _attendanceService.endBreak(event.attendanceId);
+        // await _attendanceService.endBreak(event.attendanceId); // Disabled
       }
 
       final userId = state.todayAttendance?.userId;

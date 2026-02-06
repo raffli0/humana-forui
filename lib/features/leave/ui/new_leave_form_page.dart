@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:shift/shared/widgets/app_dialog.dart';
-import 'package:shift/shared/widgets/app_header.dart';
+import 'package:humana/shared/widgets/app_dialog.dart';
+import 'package:humana/shared/widgets/app_header.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:shift/features/auth/services/auth_service.dart';
-import 'package:shift/features/leave/services/leave_service.dart';
-import 'package:shift/features/auth/models/user_model.dart';
-import 'package:shift/features/auth/bloc/auth_bloc.dart';
+import 'package:humana/features/auth/services/auth_service.dart';
+import 'package:humana/features/leave/services/leave_service.dart';
+import 'package:humana/features/auth/models/user_model.dart';
+import 'package:humana/features/auth/bloc/auth_bloc.dart';
+import 'package:humana/core/theme/app_colors.dart';
 
 class NewLeaveFormPage extends StatefulWidget {
   const NewLeaveFormPage({super.key});
@@ -21,17 +22,10 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
   final _authService = AuthService();
   DateTime? _startDate;
   DateTime? _endDate;
-  String _selectedType = 'Sick Leave';
+  String _selectedType = 'Sakit';
   bool _isLoading = false;
 
-  // Design Constants
-  static const kBgColor = Color(0xFF0E0F13);
-  static const kSurfaceColor = Color(0xFF151821);
-  static const kAccentColor = Color(0xFF7C7FFF);
-  static const kTextPrimary = Color(0xFFEDEDED);
-  static const kTextSecondary = Color(0xFF9AA0AA);
-
-  final _types = ['Sick Leave', 'Annual Leave', 'Unpaid Leave', 'Other'];
+  final _types = ['Sakit', 'Cuti Tahunan', 'Lainnya'];
 
   Future<void> _submitRequest() async {
     if (_startDate == null ||
@@ -39,7 +33,7 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
         _reasonController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Please fill all fields"),
+          content: Text("Mohon isi semua kolom"),
           backgroundColor: Colors.red,
         ),
       );
@@ -49,24 +43,23 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
     setState(() => _isLoading = true);
 
     try {
-      // Try to get user from AuthBloc state first if available
       UserModel? user;
       try {
         final authBloc = context.read<AuthBloc>();
         user = authBloc.state.user;
       } catch (_) {}
 
-      // Fallback to service if Bloc not providing user
       user ??= await _authService.checkAuthStatus();
 
       if (user == null) {
-        // Ultimate fallback: Firebase User (if Bloc/Firestore missing)
-        final firebaseUser = _authService.currentUser;
-        if (firebaseUser == null) throw Exception("User not authenticated");
+        final supabaseUser = _authService.currentUser;
+        if (supabaseUser == null) {
+          throw Exception("Pengguna tidak terautentikasi");
+        }
         user = UserModel(
-          id: firebaseUser.uid,
-          fullName: firebaseUser.displayName ?? "User",
-          email: firebaseUser.email ?? "",
+          id: supabaseUser.id,
+          fullName: supabaseUser.userMetadata?['full_name'] ?? "User",
+          email: supabaseUser.email ?? "",
           role: "employee",
         );
       }
@@ -83,14 +76,13 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
       if (mounted) {
         await AppDialog.showSuccess(
           context: context,
-          title: "Leave request sent",
-          message: "Your request is waiting for approval.",
+          title: "Permintaan cuti terkirim",
+          message: "Permintaan Anda menunggu persetujuan.",
         );
         if (mounted) Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        // Strip "Exception: " prefix for cleaner display
         final message = e.toString().replaceAll("Exception: ", "");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -116,58 +108,62 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return Scaffold(
-      backgroundColor: kBgColor,
+      backgroundColor: colors.background,
       body: SafeArea(
         child: Column(
           children: [
-            const AppHeader(title: "Request Leave", showAvatar: false),
+            const AppHeader(title: "Ajukan Cuti", showAvatar: false),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: kSurfaceColor,
+                    color: colors.surface,
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: colors.border.withValues(alpha: 0.1),
                     ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
-                        "New Leave Request",
+                      Text(
+                        "Permintaan Cuti Baru",
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
-                          color: kTextPrimary,
+                          color: colors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
-                        "Fill in the details below to submit your leave request.",
-                        style: TextStyle(fontSize: 14, color: kTextSecondary),
+                      Text(
+                        "Isi detail di bawah untuk mengajukan cuti.",
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: colors.textSecondary,
+                        ),
                       ),
                       const SizedBox(height: 24),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            "Leave Type",
+                          Text(
+                            "Jenis Cuti",
                             style: TextStyle(
                               fontWeight: FontWeight.w600,
-                              color: kTextPrimary,
+                              color: colors.textPrimary,
                             ),
                           ),
                           const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             decoration: BoxDecoration(
-                              color: kSurfaceColor,
+                              color: colors.surface,
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.1),
+                                color: colors.border.withValues(alpha: 0.2),
                               ),
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -175,9 +171,9 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
                               child: DropdownButton<String>(
                                 value: _selectedType,
                                 isExpanded: true,
-                                dropdownColor: kSurfaceColor,
-                                style: const TextStyle(
-                                  color: kTextPrimary,
+                                dropdownColor: colors.surface,
+                                style: TextStyle(
+                                  color: colors.textPrimary,
                                   fontSize: 16,
                                 ),
                                 items: _types.map((t) {
@@ -185,8 +181,8 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
                                     value: t,
                                     child: Text(
                                       t,
-                                      style: const TextStyle(
-                                        color: kTextPrimary,
+                                      style: TextStyle(
+                                        color: colors.textPrimary,
                                       ),
                                     ),
                                   );
@@ -206,14 +202,31 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
                         children: [
                           Expanded(
                             child: _DateInput(
-                              label: "Start Date",
+                              label: "Tanggal Mulai",
                               value: _startDate,
+                              colors: colors,
                               onTap: () async {
                                 final date = await showDatePicker(
                                   context: context,
                                   initialDate: DateTime.now(),
                                   firstDate: DateTime.now(),
                                   lastDate: DateTime(2030),
+                                  builder: (context, child) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        colorScheme: ColorScheme.dark(
+                                          primary: colors.accent,
+                                          onPrimary: Colors.white,
+                                          surface: colors.surface,
+                                          onSurface: colors.textPrimary,
+                                        ),
+                                        dialogTheme: DialogThemeData(
+                                          backgroundColor: colors.background,
+                                        ),
+                                      ),
+                                      child: child!,
+                                    );
+                                  },
                                 );
                                 if (date != null) {
                                   setState(() => _startDate = date);
@@ -224,14 +237,31 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
                           const SizedBox(width: 16),
                           Expanded(
                             child: _DateInput(
-                              label: "End Date",
+                              label: "Tanggal Selesai",
                               value: _endDate,
+                              colors: colors,
                               onTap: () async {
                                 final date = await showDatePicker(
                                   context: context,
                                   initialDate: _startDate ?? DateTime.now(),
                                   firstDate: _startDate ?? DateTime.now(),
                                   lastDate: DateTime(2030),
+                                  builder: (context, child) {
+                                    return Theme(
+                                      data: Theme.of(context).copyWith(
+                                        colorScheme: ColorScheme.dark(
+                                          primary: colors.accent,
+                                          onPrimary: Colors.white,
+                                          surface: colors.surface,
+                                          onSurface: colors.textPrimary,
+                                        ),
+                                        dialogTheme: DialogThemeData(
+                                          backgroundColor: colors.background,
+                                        ),
+                                      ),
+                                      child: child!,
+                                    );
+                                  },
                                 );
                                 if (date != null) {
                                   setState(() => _endDate = date);
@@ -245,36 +275,36 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
                       TextFormField(
                         controller: _reasonController,
                         maxLines: 4,
-                        style: const TextStyle(
-                          color: kTextPrimary,
+                        style: TextStyle(
+                          color: colors.textPrimary,
                           fontSize: 16,
                         ),
                         decoration: InputDecoration(
-                          labelText: "Reason",
-                          labelStyle: const TextStyle(
-                            color: kTextPrimary,
+                          labelText: "Alasan",
+                          labelStyle: TextStyle(
+                            color: colors.textPrimary,
                             fontWeight: FontWeight.w600,
                           ),
-                          hintText: "Enter reason for leave...",
-                          hintStyle: const TextStyle(color: kTextSecondary),
+                          hintText: "Masukkan alasan cuti...",
+                          hintStyle: TextStyle(color: colors.textSecondary),
                           filled: true,
-                          fillColor: kSurfaceColor,
+                          fillColor: colors.surface,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.1),
+                              color: colors.border.withValues(alpha: 0.2),
                             ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.1),
+                              color: colors.border.withValues(alpha: 0.2),
                             ),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: kAccentColor,
+                            borderSide: BorderSide(
+                              color: colors.accent,
                               width: 2,
                             ),
                           ),
@@ -286,7 +316,9 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           decoration: BoxDecoration(
-                            color: _isLoading ? Colors.grey : kAccentColor,
+                            color: _isLoading
+                                ? colors.textSecondary.withValues(alpha: 0.5)
+                                : colors.accent,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           alignment: Alignment.center,
@@ -300,7 +332,7 @@ class _NewLeaveFormPageState extends State<NewLeaveFormPage> {
                                   ),
                                 )
                               : const Text(
-                                  "Submit Request",
+                                  "Ajukan Permintaan",
                                   style: TextStyle(
                                     color: Colors.white,
                                     fontSize: 16,
@@ -325,11 +357,13 @@ class _DateInput extends StatelessWidget {
   final String label;
   final DateTime? value;
   final VoidCallback onTap;
+  final AppColors colors;
 
   const _DateInput({
     required this.label,
     required this.value,
     required this.onTap,
+    required this.colors,
   });
 
   @override
@@ -339,9 +373,9 @@ class _DateInput extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w600,
-            color: _NewLeaveFormPageState.kTextPrimary,
+            color: colors.textPrimary,
           ),
         ),
         const SizedBox(height: 8),
@@ -350,27 +384,27 @@ class _DateInput extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
             decoration: BoxDecoration(
-              color: _NewLeaveFormPageState.kSurfaceColor,
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              color: colors.surface,
+              border: Border.all(color: colors.border.withValues(alpha: 0.2)),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.calendar_today,
                   size: 16,
-                  color: _NewLeaveFormPageState.kTextSecondary,
+                  color: colors.textSecondary,
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     value != null
                         ? DateFormat("MMM dd, yyyy").format(value!)
-                        : "Select Date",
+                        : "Pilih Tanggal",
                     style: TextStyle(
                       color: value != null
-                          ? _NewLeaveFormPageState.kTextPrimary
-                          : _NewLeaveFormPageState.kTextSecondary,
+                          ? colors.textPrimary
+                          : colors.textSecondary,
                       fontSize: 14,
                     ),
                     overflow: TextOverflow.ellipsis,

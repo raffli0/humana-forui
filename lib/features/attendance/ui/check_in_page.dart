@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:shift/shared/widgets/app_header.dart';
+import 'package:humana/core/theme/app_colors.dart';
+import 'package:humana/shared/widgets/app_header.dart';
 import 'scan_page.dart';
 import '../../auth/bloc/auth_bloc.dart';
 import '../../auth/bloc/auth_state.dart';
@@ -15,13 +16,15 @@ class CheckInActionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Dummy location (e.g. Jakarta)
-    final LatLng center = const LatLng(-6.2088, 106.8456);
+    const LatLng center = LatLng(-6.2088, 106.8456);
     final attendanceService = AttendanceService();
 
     return BlocBuilder<AuthBloc, AuthState>(
       builder: (context, authState) {
+        final colors = context.colors;
         return Scaffold(
-          backgroundColor: const Color(0xFF0c202e),
+          backgroundColor:
+              colors.accent, // Use brand color as splash background
           body: SafeArea(
             child: Column(
               children: [
@@ -68,10 +71,10 @@ class CheckInActionPage extends StatelessWidget {
                             ),
                             clipBehavior: Clip.antiAlias,
                             child: FlutterMap(
-                              options: MapOptions(
+                              options: const MapOptions(
                                 initialCenter: center,
                                 initialZoom: 15,
-                                interactionOptions: const InteractionOptions(
+                                interactionOptions: InteractionOptions(
                                   flags: InteractiveFlag.none,
                                 ),
                               ),
@@ -99,9 +102,10 @@ class CheckInActionPage extends StatelessWidget {
                                       point: center,
                                       width: 48,
                                       height: 48,
-                                      child: const Icon(
+                                      child: Icon(
                                         Icons.location_on,
-                                        color: Color(0xff5a64d6),
+                                        color: colors
+                                            .textPrimary, // Changed from hardcoded for visibility on brand bg
                                         size: 48,
                                       ),
                                     ),
@@ -140,6 +144,9 @@ class CheckInActionPage extends StatelessWidget {
                                   latitude: center.latitude,
                                   longitude: center.longitude,
                                   insideOffice: true,
+                                  shiftStart: "09:00",
+                                  shiftEnd: "17:00",
+                                  tolerance: 0,
                                 );
 
                                 if (context.mounted) {
@@ -208,6 +215,7 @@ class _CheckInButtonState extends State<_CheckInButton>
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.colors;
     return GestureDetector(
       onTapDown: (_) => _controller.forward(),
       onTapUp: (_) {
@@ -221,11 +229,12 @@ class _CheckInButtonState extends State<_CheckInButton>
           width: double.infinity,
           height: 60,
           decoration: BoxDecoration(
-            color: const Color(0xff5a64d6),
+            color:
+                colors.surface, // Use surface for button on branded background
             borderRadius: BorderRadius.circular(18),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xff5a64d6).withValues(alpha: 0.4),
+                color: Colors.black.withValues(alpha: 0.2),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -233,13 +242,13 @@ class _CheckInButtonState extends State<_CheckInButton>
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: const [
-              Icon(Icons.face_retouching_natural, color: Colors.white),
-              SizedBox(width: 12),
+            children: [
+              Icon(Icons.face_retouching_natural, color: colors.textPrimary),
+              const SizedBox(width: 12),
               Text(
                 "Start Face Scan",
                 style: TextStyle(
-                  color: Colors.white,
+                  color: colors.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
